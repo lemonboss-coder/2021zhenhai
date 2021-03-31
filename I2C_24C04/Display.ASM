@@ -1,0 +1,537 @@
+;************************************************************
+;NAME:			display_app10
+;INPUT:			F_UPDATE_DISPLAY,DISPLAY_MODE_BUF
+;FUNCTION:		LCD显示
+;DESCRIBE:		NONE
+;CALL SUBPROGRAM:	NONE
+;USING RESOURCE:	
+;STACK NEED:		
+;OUTPUT:		
+;***********************************************************
+display_app:
+	b0bts1	f_update_disp         ;标志位
+	JMP	display_data90        ;标志位为0退出
+	b0bclr	f_update_disp         ;标志位为1，先清除标志位，再执行显示
+lcd_app_i:
+	call	display_data	
+;***********************************************************	
+display_app000:
+	b0mov	a,dis_mode_buf
+	@jmp_a	2          ;跳表列表的数量为2个
+	jmp	display_app100			;;00:00:待测模式
+	jmp	display_app120			;;02:测试完成数据显示	
+;;-----------------------------------------------
+display_app100:	
+	b0bts0	f_dis_app			;;0-全部显示，1-显示字符
+	jmp	display_app101
+;;***********************************************
+	mov	a,#08H          ;此处控制显示的值 对应lcd_table里面的位置
+	call	display_data10
+display_app101:
+	mov	a,#0ffh
+	b0mov	lcd_dot1,a
+        b0bts1  key_off1         ;0全亮  1全灭
+	jmp     display_app101_2
+        jmp     display_app101_1
+	mov	a,#0ffh
+display_app101_1:               ;全灭
+	mov	a,#000h
+	b0mov	lcd_dot1,a
+        mov	a,#0f0h
+	b0mov	lcd_dot2,a			
+	jmp	display_app80
+display_app101_2:              ;全亮
+        mov	a,#0ffh
+	b0mov	lcd_dot2,a			
+	jmp	display_app80
+;;-----------------------------------------------
+display_app120:	
+	b0bts0	f_dis_mode			;;0-显示数字，1-显示点
+	jmp	display_app101
+	
+	b0mov	a,num
+	call	display_data10
+;;-----------------------------------------------				
+display_app80:	
+	call	lcd_display	
+display_app90:
+	ret		
+;;**********************************************************
+display_data:
+	clr	lcd_dot1   ;
+	clr	lcd_dot2   ;屏幕app界面显示
+	mov	a,#LCD_OFF
+display_data10:
+	b0mov	dis_data_buf+2,a ;将a的值存到数组dis_data_buf的第3个字节上dis_data_buf[2]
+	b0mov	dis_data_buf+3,a
+display_data30:	
+	b0mov	dis_data_buf+0,a
+	b0mov	dis_data_buf+1,a
+	b0mov	dis_data_buf+4,a
+	b0mov	dis_data_buf+5,a	
+display_data90:
+	ret
+;;********************************************************
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+dw	0ffffh
+
+
+	
+
+

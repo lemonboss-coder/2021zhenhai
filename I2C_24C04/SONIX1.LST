@@ -1,0 +1,3840 @@
+     1  000000              /*
+     2  000000             *****************************************************************************************
+     3  000000             *											*
+     4  000000             * 					Name:		Ear_four			*
+     5  000000             *					Customer:					*
+     6  000000             *					Chip: 		SN8P2977			*
+     7  000000             *					Fcry: 		Internal 8MHz			*
+     8  000000             *					Revision: 	2015/01/12 V1.0			*
+     9  000000             *					Author:		Jocab				*
+    10  000000             *					Email:		mengliang_tan@szsealight.com.cn	*
+    11  000000             *											*
+    12  000000             *					TEL:		15012712328			*
+    13  000000             *											*
+    14  000000             *****************************************************************************************		
+    15  000000             |    Version	|     Date	|		   Description				|
+    16  000000             *****************************************************************************************
+    17  000000             |	V1.0	|  2019/08/31	|1,第一版本						|
+    18  000000             |		|		|2,							|	
+    19  000000             |		|		|3,						 	|
+    20  000000             |		|		| 							|
+    21  000000             |		|		|  							|
+    22  000000             |		|		|V10:EPROM Check Sum is DA09.				|
+    23  000000             |		|		|Security Check Sum is F49B				|
+    24  000000             *****************************************************************************************
+    25  000000             */					
+    26  E 00100204         	VERSION		EQU	100204H	;H:百为表示与24C04对应为，如有改动24C04则变动， 十位、l个位表示程序版本
+    27  E 00000000         	ICE_MODE	EQU	0	;烧片子：将ICE_MODE置 0
+    28  E 00000000         	ENC_MODE	EQU	0	;IC加密，1，不加
+    29  000000               CHIP	SN8P2977A
+    30  000000             //{{SONIX_CODE_OPTION
+    31  000000             	.Code_Option	Low_Power	Enable
+    32  000000             	.Code_Option	Watch_Dog	Disable
+    33  000000             	.Code_Option	High_Clk	IHRC
+    34  000000             	.Code_Option	High_Clk_DIV	Fhosc/4
+    35  000000             	.Code_Option	Security	Enable
+    36  000000             //}}SONIX_CODE_OPTION
+    37  000000             	include		equ.asm 
+    38  000000             ;;***************************************************************
+    39  E 00000FFF         	password_adress equ	00fffh
+    40  E 00000FF2         	TS_CAL_TIMES	equ	00Ff2h		;;校正次数 
+    41  E 00000FF3          	CAL_ADDR	equ	00ff3h	
+    42  000000             
+    43  E 0000005E         	EPPROM		EQU	05EH
+    44  000000             
+    45  E 00000032         	T_flash		EQU	50
+    46  E 0000001E         	T_10MS		equ	01EH
+    47  000000             ;-----------------------------------------------------------
+    48  000000             
+    49  000000             ;;**********************************************************
+    50  E 00000000         	Normal		EQU	00H
+    51  E 00000001         	Memory		EQU	01H
+    52  E 00000002         	Cal		EQU	02h
+    53  E 00000003         	Set		equ	03h
+    54  E 00000004         	Test		EQU	04H
+    55  000000             ;-----------------------------------------------------------				
+    56  E 000000D0         	key_on_off	EQU	P0.0		;;
+    57  E 000100D0         	key_memo	EQU	P0.1 		;;记忆/减 MO/CLR
+    58  E 000200D0         	key_mode	EQU	P0.2		;;模式/加 MODE/SET
+    59  000000             
+    60  000000              
+    61  E 00000008         	KEY_AGE_VAL	EQU	8
+    62  E 00000003         	KEYCODENO	EQU	3		;define how many keys	
+    63  000000             
+    64  E 000000D2         	green_led	equ	P2.0		;;低电平点亮
+    65  E 000100D2         	red_led		equ	p2.1		;;低电平点亮
+    66  000000             	
+    67  000000             ;;报警值
+    68  000000             ;;*******************************************************
+    69  000000             				;I2C Defines 
+    70  E 000600D0         	SCL		EQU	P0.6
+    71  E 000600B8         	SCL_MODE	equ	p0m.6
+    72  000000             
+    73  E 000700D0         	SDA		EQU	P0.7
+    74  E 000700B8         	SDA_MODE	equ	p0m.7
+    75  000000             ;===========================================================	
+    76  E 000000A0         	I2C_CON_CODE	equ 	10100000B 		;I2C器件特征码:1010 A2[P2] A1[P1] A0[P0] R/W
+    77  E 000000A0         	I2C_CON_WRITE0	equ 	I2C_CON_CODE&11111110B	;加入写bak0指令
+    78  E 000000A2         	I2C_CON_WRITE1	equ	I2C_CON_CODE|00000010B	;加入写bak1指令
+    79  000000             	
+    80  E 000000A1         	I2C_CON_READ0	equ	I2C_CON_CODE|00000001B	;加入读bak0指令
+    81  E 000000A3         	I2C_CON_READ1	equ	I2C_CON_CODE|00000011B	;加入读bak1指令
+    82  000000             
+    83  E 000000A1         	I2C_CON_READ	EQU	I2C_CON_CODE|00000001B	
+    84  000000             	;		MSD		         LSB
+    85  000000             	;128/256×8:	1  0  1  0  A2  A1  A0   R/W	XX24C01/C02
+    86  000000             	;512×8:	1  0  1  0  A2  A1  P0	 R/W	XX24C04
+    87  000000             	;1024×8:	1  0  1  0  A2  P1  P0	 R/W	XX24C08
+    88  000000             	;2048×8:	1  0  1  0  P2  P1  P0	 R/W	XX24C16
+    89  000000             	;16384×8:	1  0  1  0  0   A1  A0	 R/W    XX24C128
+    90  000000             	;32768×8:	1  0  1  0  0   A1  A0   R/W	XX24C256
+    91  000000             ;===========================================================
+    92  000000             ;LCD相关定义
+    93  000000             ;------------------------------------------------------------------------
+    94  000000             				   ;SEG:      N     N-1
+    95  000000             			   ;COM: ---3210----3210
+    96  000000             				;000ABCD00000FGE		
+    97  E 00000800         	SA		EQU	0000100000000000B
+    98  E 00000400         	SB		EQU	0000010000000000B
+    99  E 00000200         	SC		EQU	0000001000000000B
+   100  E 00000100         	SD		EQU	0000000100000000B
+   101  E 00000001         	SE		EQU	0000000000000001B
+   102  E 00000002         	SG		EQU	0000000000000010B
+   103  E 00000004         	SF		EQU	0000000000000100B
+   104  000000             
+   105  E 0000000A         	CHAR_A		EQU	10	;字符
+   106  E 0000000B         	CHAR_b		EQU	CHAR_A+1
+   107  E 0000000C         	CHAR_c		EQU	CHAR_b+1
+   108  E 0000000D         	CHAR_d		EQU	CHAR_c+1
+   109  E 0000000E         	CHAR_E		EQU	CHAR_d+1
+   110  E 0000000F         	CHAR_F		EQU	CHAR_E+1
+   111  E 00000010         	CHAR_H		EQU	CHAR_F+1
+   112  E 00000011         	CHAR_P		EQU	CHAR_H+1
+   113  E 00000012         	CHAR_L		EQU	CHAR_P+1
+   114  E 00000013         	CHAR_r		EQU	CHAR_L+1
+   115  E 00000014         	CHAR_LINE	EQU	CHAR_r+1
+   116  E 00000015         	CHAR_V		EQU	CHAR_LINE+1
+   117  E 00000016         	LCD_OFF		EQU	CHAR_V+1   ;22:灭
+   118  E 00000017         	char_i		equ	LCD_OFF+1
+   119  E 00000018         	char_o		equ	char_i+1
+   120  E 00000019         	char_n		equ	char_o+1
+   121  E 0000001A         	char_t		equ	char_n+1
+   122  E 0000001B         	CHAR_SA		EQU	char_t+1
+   123  E 0000001C         	CHAR_SD		EQU	CHAR_SA+1
+   124  E 0000001D         	CHAR_二		equ	CHAR_SD+1
+   125  E 0000001E         	CHAR_三		equ	CHAR_二+1
+   126  000000             
+   127  E 00000009         	r_buz		equ	09h.0		;;喇叭符号
+   128  E 00010009         	r_buz_x		EQU	09h.1		;;喇叭符号关闭
+   129  E 00020009         	r_memo		equ	09h.2		;;记忆符号
+   130  000000             	
+   131  E 00030007         	r_memo_1	equ	07h.3		;;记忆1(大1)
+   132  E 00030005         	r_point		equ	05h.3		;;小数点
+   133  E 00030001         	r_data_1	equ	01h.3		;;数据1（小1）
+   134  000000             
+   135  000000             	
+   136  E 00020000         	r_suf		equ	00h.2		;;体表模式符号
+   137  E 00030000         	r_body		equ	00h.3		;;人体模式符号
+   138  E 00010000         	r_bat0		equ	00h.1		;;电池符号	
+   139  E 00000000         	r_c		equ	00h.0		;;摄氏度
+   140  E 00030003         	r_F		equ	03h.3		;;F
+   141  000000             
+   142  000000             ;-------------------------------------------------			
+   143  E 00000000         	d_rdy_for_tst	equ	00		;;00:待测界面
+   144  E 00000001         	d_obj_tst_ok	equ	d_rdy_for_tst+1	;;02:测试OK显示		
+   145  E 00000002         	d_memo		equ	d_obj_tst_ok+1	;;04:记忆模式
+   146  E 00000003         	d_amb_cal_fail	equ	d_memo+1	;;05:校正测试超出环温
+   147  E 00000004         	d_test_fail	equ	d_amb_cal_fail+1;;06:校正TP错误提示
+   148  E 00000005         	d_tamb_fail	equ	d_test_fail+1	;;07:校正TS错误，或校正常温37℃超出校正次数
+   149  E 00000006         	d_cal_index	equ	d_tamb_fail+1	;;08:校正模式下检索显示 "CAx"  
+   150  E 00000007         	d_amb_cal_ok	equ	d_cal_index+1	;;09:25.0"thermistor 校正OK显示
+   151  E 00000008         	d_lcd_tst	equ	d_amb_cal_ok+1	;;10:diaplay自检	
+   152  E 00000009         	d_ts_raw_data	equ	d_lcd_tst+1	;;11thermistor raw data  
+   153  E 0000000A         	d_tp_raw_data	equ	d_ts_raw_data+1	;;12thermopile raw data 
+   154  E 0000000B          	d_amb		equ	d_tp_raw_data+1	;;13	
+   155  E 0000000C         	d_fun_index	equ	d_amb+1		;;12;设置模式下检索显示 "Fx"
+   156  E 0000000D         	d_unit_cnvt	equ	d_fun_index+1	;;14:			F1	
+   157  E 0000000E         	d_fever_set	equ	d_unit_cnvt+1	;;15;buzzer		F3	
+   158  E 0000000F         	d_buz_set	equ	d_fever_set+1	;;16;单位转换模式显示	F4 
+   159  E 00000010         	d_offset	equ	d_buz_set+1	;;14;fever set		F2
+   160  E 00000011         	d_rst		equ	d_offset+1	;;18;复位显示
+   161  E 00000012         	d_clr_memo	equ	d_rst+1		;;17;清除记忆模式显示	
+   162  000000             
+   163  000000             ;-------------------------------------------------
+   164  E 00000001         	b_1long_buz	equ	1
+   165  E 00000003         	b_1short_buz	equ	3
+   166  E 00000005         	b_3short_buz	equ	5
+   167  E 00000007         	b_10short_buz	equ	7
+   168  000000             
+   169  E 00000EFA         	Test_38_low	EQU	3834     
+   170  E 00000F18         	Test_38_high	EQU	3864  
+   171  E 00000020                 DATA_NUM        EQU     32
+   172  000000             
+   173  000000             	
+   174  000000             ;;----------------------------------
+   175  000000             	include		ram.asm
+   176  000000             .DATA
+   177  000000             ORG	00H
+   178  0000 D             	wk00		ds	1	;system ram
+   179  0001 D             	wk01		ds	1
+   180  0002 D             	wk02		ds	1
+   181  0003 D             	wk03		ds	1
+   182  0004 D             	wk04		ds	1
+   183  0005 D             	wk05		ds	1
+   184  0006 D             	wk06		ds	1
+   185  0007 D             	wk07		ds	1	
+   186  0008 D             	wk08		ds	1
+   187  0009 D             	wk09		ds	1
+   188  000A D             	wk10		ds	1
+   189  000B D             	wk11		ds	1	
+   190  000C D             	wk12		ds	1	
+   191  000D D             	wk13		ds	1
+   192  000E D             	wk14		ds	1
+   193  000F D             	wk15		ds	1	
+   194  0010 D             	wk16		ds	1
+   195  0011 D             	wk17		ds	1
+   196  0012 D             	wk18		ds	1
+   197  0013 D             	wk19		ds	1
+   198  0014 D             	wk20		ds	1
+   199  0015 D             	wk21		ds	1
+   200  0016 D             	wk22		ds	1
+   201  0017 D             	wk23		ds	1		
+   202  0018 D             	wk24		ds	1
+   203  0019 D             	wk25		ds	1
+   204  001A D             	wk26		ds	1
+   205  001B D             	wk27		ds	1
+   206  001C D                     WORD_ADR_H      DS      1
+   207  001D D                     WORD_ADR_M      DS      1
+   208  001E D                     WORD_ADR_L      DS      1
+   209  001F D                     SENDBUF         DS      1
+   210  E 0007001F                 SENDBIT         EQU     SENDBUF.7
+   211  0020 D                     RECEIVEBUF      DS      1
+   212  E 00000020                 RECEIVEBIT      EQU     RECEIVEBUF.0
+   213  0021 D                     ACK             DS      1
+   214  E 00000021                 ACKDATA         EQU     ACK.0
+   215  E 00010021                 WRITE_OR_READ   EQU      ACK.1
+   216  000022             
+   217  0022 D                     WRITEDATA       DS      16
+   218  0032 D                     RECEIVEDATA     DS      16
+   219  0042 D                     N00             DS      1
+   220  0043 D             	N01             DS      1
+   221  0044 D                     N03             DS      1
+   222  0045 D                     N04             DS      1
+   223  0046 D             	r00		ds	1	
+   224  0047 D             	r01		ds	1
+   225  0048 D             	r02		ds	1
+   226  0049 D             	r03		ds	1
+   227  004A D             	r04		ds	1
+   228  004B D             	r05		ds	1
+   229  004C D             	r06		ds	1
+   230  004D D             	r07		ds	1	
+   231  004E D             	r08		ds	1
+   232  004F D             	r09		ds	1
+   233  000050             
+   234  0050 D                     key_off         ds      1
+   235  000051                    ; key_off_1       equ     key_off1.0
+   236  E 00000050                 key_off1        equ     key_off.0
+   237  000051             
+   238  000051             ;;***********************************
+   239  E 00000046         	temp_h		equ	r00
+   240  E 00000047         	temp_l		equ	r01
+   241  000051             
+   242  E 00000046         	body_max_h	equ	r00  	;;1
+   243  E 00000047         	body_max_l	equ	r01  	;;2
+   244  E 00000048         	body_min_h	equ	r02  	;;3
+   245  E 00000049         	body_min_l	equ	r03  	;;4
+   246  E 0000004A         	fever1_h	EQU	r04	;;5
+   247  E 0000004B         	fever1_L	EQU	R05	;;6
+   248  E 0000004C         	fever3_h	equ	r06	;;7
+   249  E 0000004D         	fever3_l	equ	r07	;;8		
+   250  000051             ;-----------------------------------------------------------------------------	
+   251  0051 D             	accbuf		ds	1
+   252  0052 D             	pflagbuf	ds	1
+   253  0053 D             	rbankbuf	ds	1
+   254  0054 D             	sys_mode	ds	1	;00:normal,01:memory,02:cal mode,03:offset,04h:check mode
+   255  000055             ;-----------------------------------------------------------------------------	
+   256  0055 D             	keyinbuf	ds	1	;key process ram
+   257  0056 D             	keychkbuf	ds	1
+   258  0057 D             	keychat		ds	1
+   259  0058 D             	keycvtbuf	ds	1
+   260  0059 D             	keyoldbuf	ds	1
+   261  005A D             	key_command	ds	1
+   262  005B D             	long_key_back	ds	1
+   263  005C D             	key_state	ds	1
+   264  00005D             
+   265  005D D             	long_key_h	ds	1
+   266  005E D             	long_key_l	ds	1
+   267  00005F             ;-----------------------------------------------------------------------------	
+   268  00005F             
+   269  00005F             ;-----------------------------------------------------------------------------
+   270  00005F             
+   271  00005F             ;-----------------------------------------------------------------------------	
+   272  00005F             
+   273  00005F             
+   274  00005F             ;-----------------------------------------------------------------------------		
+   275  005F D             	tst_obj_step	ds	1	;测量模式步骤，此寄存器还与清除记忆模式公用
+   276  0060 D             	sample_counter	ds	1
+   277  0061 D             	tpadc_counter	ds	1
+   278  0062 D             	adc_counter	DS	1
+   279  0063 D             	memory_index	ds	1	;;记忆模式索引
+   280  000064             ;-----------------------------------------------------------------------------	
+   281  0064 D             	time_10ms	ds	1
+   282  0065 D             	test_times	ds	1
+   283  0066 D             	timer_buf1	ds	1
+   284  0067 D             	timer_buf2	ds	1	;关机时间
+   285  000068             
+   286  0068 D             	num		ds	1
+   287  000069             
+   288  0069 D             	bl_base_time_buf	ds	1
+   289  00006A             
+   290  006A D             	flash_buf	ds	1
+   291  006B D             	buzzer_mode	ds	1
+   292  006C D             	buzzer_delay	ds	1
+   293  006D D             	buz_step	ds	1
+   294  006E D             	buzer_short_cnt	ds	1
+   295  00006F             ;===========================================================================	
+   296  006F D             	dis_mode_buf 	ds	1	;display
+   297  0070 D             	dis_data_buf	ds	6
+   298  000076             
+   299  000076             	
+   300  0076 D             	lcd_dot1	ds	1
+   301  0077 D             	lcd_dot2	ds	1	
+   302  000078             
+   303  E 00000076         	f_c		equ	lcd_dot1.0	;;摄氏度
+   304  E 00010076         	f_bat		equ	lcd_dot1.1	;;电池符号
+   305  E 00020076         	f_suf		equ	lcd_dot1.2	;;体表模式符号
+   306  E 00030076         	f_body		equ	lcd_dot1.3	;;人体模式化符号
+   307  E 00040076         	f_buz		equ	lcd_dot1.4	;;喇叭符号
+   308  E 00050076         	f_buz_x		equ	lcd_dot1.5	;;喇叭符号关闭
+   309  E 00060076         	f_memo		equ	lcd_dot1.6	;;记忆
+   310  E 00070076         	f_bat1		equ	lcd_dot1.7
+   311  000078             
+   312  E 00000077         	f_data_1	equ	lcd_dot2.0     ;(小1)
+   313  E 00010077         	f_point		equ	lcd_dot2.1	;;小数点
+   314  E 00020077         	f_memo_1	equ	lcd_dot2.2	;;记忆1（大1）
+   315  E 00030077         	f_f      	equ	lcd_dot2.3	;;F
+   316  000078             	
+   317  E 00060077         	f_test_point	equ	lcd_dot2.6	;;0-位小数，1-两位小数
+   318  E 00070077         	f_set_negative	equ	lcd_dot2.7	;;负数
+   319  000078             
+   320  000078             ;===========================================================================		
+   321  0078 D             	bitram1		ds	1
+   322  0079 D             	bitram2		ds	1
+   323  007A D             	bitram3		ds	1
+   324  007B D             	bitram4		ds	1
+   325  007C D             	bitram5		ds	1
+   326  007D D             	bitram6		ds	1
+   327  007E D              	bitram7		ds	1
+   328  007F D              	bitram8		DS	1
+   329  000080             
+   330  E 00000078         	f_key_state		equ	bitram1.0
+   331  E 00010078         	f_update_disp		equ	bitram1.1
+   332  E 00020078         	f_dis_mode		equ	bitram1.2	;;0-显示数字，1-显示点
+   333  E 00030078         	f_dis_zd		equ	bitram1.3	;;0-自动显示，1-手动显示
+   334  E 00040078         	f_power_on 		equ 	bitram1.4	;第一次上电
+   335  E 00050078         	f_turnoff		equ	bitram1.5
+   336  E 00060078         	f_dis_app		equ	bitram1.6	;;0-全部显示，1-显示字符
+   337  E 00070078         	f_flash			equ	bitram1.7	;0-bit,1-data
+   338  000080             
+   339  E 00000079         	f_longkey_state		equ	bitram2.0
+   340  E 00010079         	f_cal_test		equ	bitram2.1	;;0-普通校正模式，1-专业校正模式
+   341  E 00020079         	f_long_down		equ	bitram2.2
+   342  E 00030079         	f_fc_temp1		equ	bitram2.3	;;不能修改了，20180515
+   343  000080             
+   344  000080             
+   345  E 0000007E         	CLR_RAM_START	EQU	07fh-1		
+   346  00007F             org	07fh			;;
+   347  007F D             	sys_bit		ds	1
+   348  000080             
+   349  000080             
+   350  000080             
+   351  000100             ORG	100H
+   352  000100             
+   353  000100                     ;DATA_NUM        DS      1	
+   354  000100             	;tpadc_data_buf	ds	32
+   355  0100 D             	data_temp_h	ds	1
+   356  0101 D             	data_temp_m	ds	1
+   357  0102 D             	data_temp_l	ds	1
+   358  0103 D             	data_cnt	ds	1
+   359  000104             
+   360  000104             
+   361  0104 D             	tp_adc_buf_H	DS	1
+   362  0105 D             	tp_adc_buf_l	DS	1
+   363  000106             
+   364  0106 D             	tp_adc_max_H	DS	1
+   365  0107 D             	tp_adc_max_l	DS	1
+   366  000108             ;;*******************************************
+   367  0108 D             	adc_avg_max_h	ds	1		   ;;此处位置不动
+   368  0109 D             	adc_avg_max_l	ds	1	
+   369  00010A             	
+   370  010A D             	tsadc_avg_data_m ds	1
+   371  010B D             	tsadc_avg_data_l ds	1
+   372  00010C             
+   373  010C D             	tp_adc_buf_bak_h	DS	1
+   374  010D D               	tp_adc_buf_bak_L	DS	1
+   375  00010E             
+   376  00010E             ;	tpadc_raw_data_m	DS	1
+   377  00010E             ;	tpadc_raw_data_L	DS	1
+   378  00010E             ;;*******************************************
+   379  00010E             
+   380  00010E             	
+   381  010E D             	lbt_raw_adc_L	ds	1
+   382  010F D             	lbt_raw_adc_h	ds	1
+   383  000110             
+   384  0110 D             	tp_adc_bak_h	ds	1
+   385  0111 D             	tp_adc_bak_l	ds	1
+   386  000112             
+   387  0112 D             	t_object_h_bak	ds	1	;C
+   388  0113 D             	t_object_l_bak	ds	1
+   389  000114             
+   390  000114             
+   391  0114 D             	t_object_h_body	ds	1
+   392  0115 D             	t_object_l_body	ds	1
+   393  000116             
+   394  0116 D             	i2c_delay	ds	1
+   395  000117             ;;*******************************************************************************
+   396  0117 D             	TEST_DEV		ds	1
+   397  0118 D             	ts_sampl_cnt		DS	1
+   398  0119 D              	init_ts_cnt		ds	1	;;
+   399  011A D             	ts_div_cnt		DS	1
+   400  00011B             
+   401  011B D               	tp_sampl_cnt		ds	1
+   402  011C D             	init_tp_cnt		ds	1	;;
+   403  011D D             	tp_div_cnt		DS	1
+   404  00011E             
+   405  011E D             	TS_AMPM			DS	1	;;				
+   406  011F D             	TP_AMPM			DS	1	;;				
+   407  0120 D              	ADCM_1			DS	1	;;				
+   408  0121 D             	ADCM_2			DS	1	;;						
+   409  0122 D             	turn_off_time		ds	1	;;
+   410  0123 D             	Bl_base_time		DS	1
+   411  0124 D             	pass_word		ds	1	;;											
+   412  0125 D             	EPPROM_version		ds	1	;;
+   413  0126 D             	LBT_H			ds	1
+   414  0127 D             	LBT_l			ds	1						
+   415  0128 D             	amb_cnst_lo_h		ds	1	;;				
+   416  0129 D             	amb_cnst_lo_l		ds	1	;;				
+   417  012A D             	amb_cnst_hi_h		ds	1	;;				
+   418  012B D             	amb_cnst_hi_l		ds	1	;;
+   419  00012C             
+   420  012C D             	order_stand		ds	1
+   421  012D D             	order_stand1		ds	1
+   422  012E D             	order_state1		ds	10	;;
+   423  0138 D             	adc_step1		ds	1	;;
+   424  0139 D             	adc_step2		ds	1
+   425  013A D             	suf_val			ds	1
+   426  013B D             	body_val		ds	1
+   427  013C D             	order_suf		ds	1
+   428  013D D             	order_body		ds	1
+   429  00013E             ;;***********************************************
+   430  013E D             	timer_buf3		ds	1	;60S
+   431  013F D             	min			ds	1								
+   432  000140             ;;***********************************************
+   433  000140             ;	CLR_RAM_START		EQU	07eh
+   434  E 0000007F         	CLR_RAM_START1		EQU	07fh
+   435  000140             
+   436  000140             	
+   437  000140             
+   438  000140             	
+   439  000140             	
+   440  000140             
+   441  000140             
+   442  000140             ;;----------------------------------
+   443  000000             .code 
+   444  000000             reset0:
+   445  000000             	org		00 
+   446  000000   0000(1)         	nop
+   447  000001   3600(1)    	b0mov		pflag,#00h		;pflag = x,x,x,x,x,c,dc,z
+   448  000002   6C78(1)   	b0bset		f_power_on		;1-power on reset 
+   449  000003   8110(2)      	jmp		MAIN			;;复位
+   450  000008             	org		08
+   451  000008             	include		interrupt.asm		  
+   452  000008             int_server:
+   453  000008             ;-----------------------------------
+   454  000008             ;	save acc and system registers
+   455  000008             ;-----------------------------------
+   456  000008   0251(1)   	b0xch 	a,accbuf    ;保存a里面的数据				;b0xch instruction do not change c,z flag
+   457  000009   2E86(1)  	b0mov	a,pflag
+   458  00000A   0252(1)          b0xch   a,pflagbuf  ;调用b0xch存储器必须位于 BANK0，
+   459  00000B             	;b0mov	pflagbuf,a   ;保存pflag的数据
+   460  00000B   2E87(1)  	b0mov	a,rbank       
+   461  00000C   2F53(1)  	b0mov	rbankbuf,a    ;保存
+   462  00000D   3700(1)  	b0mov	rbank,#00
+   463  00000E             ;-----------------------------------
+   464  00000E             ;   check which interrupt happen
+   465  00000E             ;-----------------------------------					
+   466  00000E             inttc0chk:
+   467  00000E   7DC8(1+S)  	b0bts1	ftc0irq					; 检查TC0是否有请求中断，为0则没有发生中断，执行jmp
+   468  00000F   8049(2)  	jmp	int_exit				; jump to int0 interrupt service routine
+   469  000010             ;--------------------------------------------------------
+   470  000010             inttc0:
+   471  000010   65C8(1)  	b0bclr	ftc0irq         ;TCO中断请求标志位清0
+   472  000011   2D55(1)  	mov	a,#055h         ;给TCOC付预置值
+   473  000012   2FDB(1)  	b0mov	TC0C,a		
+   474  000013             intt010:
+   475  000013             	djnz	time_10ms,int_exit    ;djnz是什么意思？？？？？？？？？？？？？？？？？？？？？？？？？？？？？？？
+   476  000013   2664(1+S)  	decms	time_10ms
+   477  000014   8049(2)  		jmp	int_exit
+   478  000015   2D1E(1)   	mov	a,#T_10MS
+   479  000016   2F64(1)  	b0mov	time_10ms,a
+   480  000017             ;--------------------------------------------------------
+   481  000017             ;;10MS
+   482  000017             dkeychat:
+   483  000017   2E57(1)         	b0mov   a,keychat
+   484  000018   7886(1+S)  	b0bts1	FZ      ;Z为零标记；keychat不为0；则FZ为0；FZ为0则执行自减1
+   485  000019   2657(1+S)  	decms	keychat   ;keychat自减1
+   486  00001A   0000(1)  	nop
+   487  00001B             ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+   488  00001B             long_key_chat: 
+   489  00001B   2E5D(1)  	b0mov   a,long_key_h
+   490  00001C   185E(1)  	or	a,long_key_l  ;OR 指令为逻辑或指令。两个操作数相应的位任何一位为 1，其相应位为 1。如果结果为 0，零标志置 1，反之置 0。
+   491  00001D   7886(1+S)  	b0bts1	FZ            ;判断零标记位是否位0，意味long_key不为0，执行long_key_l自检
+   492  00001E   265E(1+S)  	decms	long_key_l  ;long_key_l自减
+   493  00001F   8025(2)  	jmp	long_key_chat90
+   494  000020                
+   495  000020   265D(1+S)       	decms	long_key_h
+   496  000021   8023(2)       	jmp	long_key_chat80
+   497  000022   8025(2)       	jmp	long_key_chat90
+   498  000023             long_key_chat80:
+   499  000023             	B0MOV_	long_key_l,#100  	
+   500  000023   2D64(1)  	mov	a, #100
+   501  000024   2F5E(1)  	b0mov	long_key_l, a
+   502  000025             long_key_chat90:
+   503  000025             ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+   504  000025             buz_delay:	
+   505  000025   2E6C(1)     	b0mov	a,buzzer_delay
+   506  000026             	jz	buz_delay90
+   507  000026   7086(1+S)  	b0bts0	FZ
+   508  000027   802B(2)  		jmp	buz_delay90
+   509  000028   266C(1+S)  	decms	buzzer_delay
+   510  000029   802B(2)  	jmp	buz_delay90	
+   511  00002A   60DA(1)  	B0BCLR	FPWM0OUT
+   512  00002B             buz_delay90:			
+   513  00002B             ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+   514  00002B             ;NAME:			timer_app
+   515  00002B             ;INPUT:			10ms		
+   516  00002B             ;FUNCTION:		
+   517  00002B             ;DESCRIBE:		NONE
+   518  00002B             ;CALL SUBPROGRAM:	NONE
+   519  00002B             ;USING RESOURCE:	
+   520  00002B             ;STACK NEED:		0
+   521  00002B             ;OUTPUT:	   		
+   522  00002B             ;************************************************************
+   523  00002B             timer_app:
+   524  00002B             	djnz	flash_buf,timer_app10
+   525  00002B   266A(1+S)  	decms	flash_buf
+   526  00002C   8041(2)  		jmp	timer_app10
+   527  00002D             	B0MOV_	flash_buf,#T_flash
+   528  00002D   2D32(1)  	mov	a, #T_flash
+   529  00002E   2F6A(1)  	b0mov	flash_buf, a
+   530  00002F   6978(1)  	b0bset	f_update_disp
+   531  000030   2D80(1)  	mov	a,#10000000b
+   532  000031   1C78(1)  	xor	bitram1,a		;0-bit,1-data
+   533  000032             	
+   534  000032   7378(1+S)  	b0bts0	f_dis_zd		;;0-自动显示，1-手动显示
+   535  000033   8041(2)  	jmp	timer_app10
+   536  000034             ;;***************************************
+   537  000034             timer_app00:
+   538  000034   1568(1+S)  	incs	num ;num自加存到acc
+   539  000035   0000(1)  	nop
+   540  000036             	cjbe	a,#09,timer_app03
+   541  000036   0609(1+S)  		cmprs	a, #09
+   542  000037   7A86(1+S)  		b0bts1	FC
+   543  000038   8040(2)  		jmp	timer_app03
+   544  000039   7278(1+S)  	b0bts0	f_dis_mode			;;0-显示数字，1-显示点
+   545  00003A   803E(2)  	jmp	timer_app01
+   546  00003B             	;b0bset	f_dis_mode
+   547  00003B   7278(1+S)          b0bts0	f_dis_mode              ;跑马灯跳过显示点
+   548  00003C   2D09(1)  	mov	a,#09
+   549  00003D   803E(2)  	jmp	timer_app01
+   550  00003E             	;jmp	timer_app03
+   551  00003E             timer_app01:
+   552  00003E   6278(1)  	b0bclr	f_dis_mode			;;0-显示数字，1-显示点
+   553  00003F   2D00(1)  	mov	a,#00
+   554  000040             timer_app03:
+   555  000040   2F68(1)  	b0mov	num,a	
+   556  000041             ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;			
+   557  000041             timer_app10:
+   558  000041             	djnz	timer_buf1,timer_app90
+   559  000041   2666(1+S)  	decms	timer_buf1
+   560  000042   8049(2)  		jmp	timer_app90
+   561  000043             	B0MOV_	timer_buf1,#100		;10*100ms  控制跑马灯显示速度
+   562  000043   2D64(1)  	mov	a, #100
+   563  000044   2F66(1)  	b0mov	timer_buf1, a
+   564  000045             timer_app100:	
+   565  000045             ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+   566  000045             timer_app11:
+   567  000045             	djnz	bl_base_time_buf,int_exit	;;5s后关闭背光
+   568  000045   2669(1+S)  	decms	bl_base_time_buf
+   569  000046   8049(2)  		jmp	int_exit
+   570  000047             	b0mov_	bl_base_time_buf,#05
+   571  000047   2D05(1)  	mov	a, #05
+   572  000048   2F69(1)  	b0mov	bl_base_time_buf, a
+   573  000049             timer_app90:
+   574  000049             ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;						
+   575  000049             int_exit:
+   576  000049   65C8(1)  	b0bclr	ftc0irq
+   577  00004A   2E53(1)  	b0mov	a,rbankbuf
+   578  00004B   2F87(1)  	b0mov	rbank,a	
+   579  00004C   2E52(1)  	b0mov	a,pflagbuf
+   580  00004D   2F86(1)  	b0mov	pflag,a
+   581  00004E   0251(1)  	b0xch	a,accbuf				;b0xch instruction do not change c,z flag
+   582  00004F   0F00(2)  	reti	
+   583  000050             
+   584  000050             				
+   585  000050             
+   586  000050             	
+   587  000050             	
+   588  000050              	include		table.asm 
+   589  000050             LCD_TABLE:
+   590  000050             	       				;LCD 段码表
+   591  000050   0F05(2)  	DW	SA+SF+SE+SD+SC+SB	;'0'		
+   592  000051   0600(1+S)  	DW	SB+SC			;'1'
+   593  000052   0D03(2)  	DW	SA+SB+SG+SE+SD	 	;'2'
+   594  000053   0F02(2)  	DW	SA+SB+SG+SC+SD	 	;'3'
+   595  000054   0606(1+S)  	DW	SF+SG+SB+SC		;'4'
+   596  000055   0B06(1)  	DW	SF+SG+SC+SD+SA		;'5'
+   597  000056   0B07(1)  	DW	SA+SF+SE+SD+SC+SG	;'6'
+   598  000057   0E00(2)  	DW	SA+SB+SC		;'7'
+   599  000058   0F07(2)  	DW	SA+SB+SC+SD+SE+SF+SG	;'8'
+   600  000059   0F06(2)  	DW	SA+SB+SC+SD+SF+SG	;'9'
+   601  00005A   0E07(2)  	DW	SA+SB+SC+SE+SF+SG	;'A'	10
+   602  00005B   0307(1)  	DW	SF+SE+SD+SC+SG		;'b'	11
+   603  00005C   0905(1)  	DW	SA+SD+SE+SF		;'c'	12
+   604  00005D   0703(1+S)  	DW	SB+SG+SE+SD+SC		;'d'	13
+   605  00005E   0907(1)  	DW	SA+SF+SG+SE+SD		;'E'	14
+   606  00005F   0807(1)  	DW	SA+SF+SE+SG		;'F'	15
+   607  000060   0607(1+S)  	DW	SB+SC+SE+SF+SG		;'H'	16
+   608  000061   0C07(1)  	DW	SA+SB+SE+SF+SG		;'P'	17
+   609  000062   0105(1)  	DW	SF+SE+SD		;'L'	18
+   610  000063   0003(1)  	DW	SE+SG			;'r'	19
+   611  000064   0002(1)  	DW	SG			;'-'	20
+   612  000065   0705(1+S)  	DW	SB+SC+SD+SE+SF		;'V'	21
+   613  000066   0000(1)  	DW	00H			;'灭'	22
+   614  000067   0001(1)  	dw	se			;"i	23
+   615  000068   0303(1)  	dw	sg+sc+se+sd		;"O"	24
+   616  000069   0203(1)  	dw	sg+sc+se		;"n"	25
+   617  00006A   0107(1)  	dw	sg+sf+se+sd		;"T"	25
+   618  00006B   0800(1)  	DW	SA
+   619  00006C   0100(1)  	DW	SD
+   620  00006D             ;;************************************************
+   621  00006D             norml_key_table:			;
+   622  00006D   0000(1)  	dw	00h,01h,02h		;onoff 开机测量键   
+   623  00006E   0001(1)  
+   624  00006F   0002(1)  
+   625  000070   0000(1)  	dw	00h,03h,00h		;mode/UP  模式转换键    
+   626  000071   0003(1)  
+   627  000072   0000(1)  
+   628  000073   0000(1)  	dw	00h,04h,00h		;memo/DOWN记忆多功能键  	
+   629  000074   0004(1)  
+   630  000075   0000(1)  
+   631  000076             
+   632  000076             
+   633  000076             
+   634  000076             	include		table2.asm
+   635  000076             LCD_TABLE2:
+   636  000076             	       				;LCD 段码表
+   637  000076   0D03(2)  	DW	SA+SB+SG+SE+SD   	;'2'		
+   638  000077   0F05(2)  	DW	SA+SF+SE+SD+SC+SB	;'0'
+   639  000078   0D03(2)  	DW	SA+SB+SG+SE+SD	 	;'2'
+   640  000079   0600(1+S)  	DW	SB+SC			;'1'
+   641  00007A   0F05(2)  	DW	SA+SF+SE+SD+SC+SB	;'0'
+   642  00007B   0F02(2)  	DW	SA+SB+SG+SC+SD	 	;'3'
+   643  00007C   0D03(2)  	DW	SA+SB+SG+SE+SD	 	;'2'
+   644  00007D   0F05(2)  	DW	SA+SF+SE+SD+SC+SB	;'0'
+   645  00007E   0D03(2)  	DW	SA+SB+SG+SE+SD   	;'2'
+   646  00007F   0F05(2)  	DW	SA+SF+SE+SD+SC+SB	;'0'
+   647  000080   0F07(2)  	DW	SA+SB+SC+SD+SE+SF+SG	;'8'	10
+   648  000081   0307(1)  	DW	SF+SE+SD+SC+SG		;'b'	11
+   649  000082   0905(1)  	DW	SA+SD+SE+SF		;'c'	12
+   650  000083   0703(1+S)  	DW	SB+SG+SE+SD+SC		;'d'	13
+   651  000084   0907(1)  	DW	SA+SF+SG+SE+SD		;'E'	14
+   652  000085   0807(1)  	DW	SA+SF+SE+SG		;'F'	15
+   653  000086   0607(1+S)  	DW	SB+SC+SE+SF+SG		;'H'	16
+   654  000087   0C07(1)  	DW	SA+SB+SE+SF+SG		;'P'	17
+   655  000088   0105(1)  	DW	SF+SE+SD		;'L'	18
+   656  000089   0003(1)  	DW	SE+SG			;'r'	19
+   657  00008A   0002(1)  	DW	SG			;'-'	20
+   658  00008B   0705(1+S)  	DW	SB+SC+SD+SE+SF		;'V'	21
+   659  00008C   0000(1)  	DW	00H			;'灭'	22
+   660  00008D   0001(1)  	dw	se			;"i	23
+   661  00008E   0303(1)  	dw	sg+sc+se+sd		;"O"	24
+   662  00008F   0203(1)  	dw	sg+sc+se		;"n"	25
+   663  000090   0107(1)  	dw	sg+sf+se+sd		;"T"	25
+   664  000091   0800(1)  	DW	SA
+   665  000092   0100(1)  	DW	SD
+   666  000093             ;;************************************************
+   667  000093             num_table:
+   668  000093   0000(1)           dw  00H
+   669  000094   0001(1)           dw  01H
+   670  000095   0002(1)           dw  02H
+   671  000096   0003(1)           dw  03H
+   672  000097   0004(1)           dw  04H
+   673  000098   0005(1)           dw  05H
+   674  000099   0006(1)           dw  06H
+   675  00009A   0007(1)           dw  07H
+   676  00009B   0008(1)           dw  08H
+   677  00009C   0009(1)           dw  09H
+   678  00009D              
+   679  00009D             	include		table3.asm  
+   680  00009D             WRITE_TABLE:
+   681  00009D   0001(1)          DW    1H
+   682  00009E   0002(1)          DW    2H
+   683  00009F   0003(1)          DW    3H
+   684  0000A0   0004(1)          DW    4H
+   685  0000A1   0005(1)          DW    5H
+   686  0000A2   0006(1)          DW    6H
+   687  0000A3   0007(1)          DW    7H
+   688  0000A4   0008(1)          DW    8H
+   689  0000A5   0009(1)          DW    9H
+   690  0000A6   0000(1)          DW    00H
+   691  0000A7   0011(1)          DW    11H
+   692  0000A8   0022(1)          DW    22H
+   693  0000A9   0033(1)          DW    33H
+   694  0000AA   0044(1)          DW    44H
+   695  0000AB   0055(1)          DW    55H
+   696  0000AC   0066(1)          DW    66H
+   697  0000AD   0077(1)          DW    77H
+   698  0000AE   0088(1)          DW    88H
+   699  0000AF   0099(1)          DW    99H
+   700  0000B0   0000(1)          DW    00H
+   701  0000B1   0001(1)          DW    1H
+   702  0000B2   0002(1)          DW    2H
+   703  0000B3   0003(1)          DW    3H
+   704  0000B4   0004(1)          DW    4H
+   705  0000B5   0005(1)          DW    5H
+   706  0000B6   0006(1)          DW    6H
+   707  0000B7   0007(1)          DW    7H
+   708  0000B8   0008(1)          DW    8H
+   709  0000B9   0009(1)          DW    9H
+   710  0000BA   000A(1)          DW    0AH
+   711  0000BB   000B(1)          DW    0BH
+   712  0000BC   000C(1)          DW    0CH
+   713  0000BD   000D(1)          DW    0DH
+   714  0000BE   000E(1)          DW    0EH
+   715  0000BF   000F(1)          DW    0FH
+   716  0000C0   007A(1)          DW    7AH
+   717  0000C1   007A(1)          DW    7AH
+   718  0000C2   007A(1)          DW    7AH
+   719  0000C3             ;*********************************************************************************
+   720  0000C3             
+   721  0000C3             
+   722  0000C3             	include		math.asm 
+   723  0000C3             ;*********************************************************************************
+   724  0000C3             ;NAME:			sub_hex2b
+   725  0000C3             ;INPUT:			被减数高字节赋予wk03，低字节赋予wk02
+   726  0000C3             ;			减数高字节赋予wk01，低字节赋予wk00
+   727  0000C3             ;FUNCTION:		(FC)(wk01wk00)=(wk03wk02)-(wk01wk00)
+   728  0000C3             ;DESCRIBE:		选取：SUB_HEX2B_KEY	EQU	1
+   729  0000C3             ;			原码输入,补码输出
+   730  0000C3             ;CALL SUBPROGRAM:	NONE
+   731  0000C3             ;USING RESOURCE:	A,wk03,wk02,wk01,wk00,PFLAG
+   732  0000C3             ;STACK NEED:		0
+   733  0000C3             ;ROMSIZE:		10
+   734  0000C3             ;OUTPUT:		差的高字节存于wk01中,低字节存于wk00中,符号位在FC中,1:POS 0:NEG
+   735  0000C3             ;*********************************************************************************
+   736  0000C3             sub_hex2b00:
+   737  0000C3   2B01(1)  	clr	wk01
+   738  0000C4   2B03(1)  	clr	wk03
+   739  0000C5             sub_hex2b: 
+   740  0000C5   2E02(1)  	b0mov	a,wk02
+   741  0000C6   2300(1)  	sub	wk00,a
+   742  0000C7   2E03(1)  	b0mov	a,wk03
+   743  0000C8   2101(1)  	sbc	wk01,a	
+   744  0000C9   7A86(1+S)  	b0bts1	fc
+   745  0000CA   7286(1+S)  	b0bts0	fc
+   746  0000CB   80CF(2)  	jmp	sub_hex2b90
+   747  0000CC   2D00(1)  	mov	a,#00h
+   748  0000CD   2300(1)  	sub	wk00,a
+   749  0000CE   2101(1)  	sbc	wk01,a
+   750  0000CF             sub_hex2b90:
+   751  0000CF   0E00(2)  	ret 
+   752  0000D0             ;*********************************************************************************
+   753  0000D0             ;NAME:			mul_hex2b
+   754  0000D0             ;INPUT:			被乘数在wk05(高)、wk04(低)(wk05wk04)中，
+   755  0000D0             ;			乘数在  wk01(高)、wk00(低)(wk01wk00)中
+   756  0000D0             ;FUNCTION:		双字节二进制无符号数乘法
+   757  0000D0             ;DESCRIBE:		(wk03wk02wk01wk00)=(wk05wk04)*(wk01wk00)
+   758  0000D0             ;			选取：MUL_HEX2B_KEY 	EQU 	1
+   759  0000D0             ;CALL SUBPROGRAM:	NONE
+   760  0000D0             ;USING RESOURCE:	A,R,wk00,wk01,wk02,wk03,wk04,wk05,FC
+   761  0000D0             ;STACK NEED:		0
+   762  0000D0             ;ROMSIZE:		17
+   763  0000D0             ;run sycle:		14*16+4=228
+   764  0000D0             ;OUTPUT:		乘积的整数在wk03wk02wk01wk00中(高->低)
+   765  0000D0             ;*********************************************************************************
+   766  0000D0             mul_hex1b0:
+   767  0000D0   2F04(1)  	B0MOV	WK04,A
+   768  0000D1             mul_hex1b:		;(wk03wk02wk01wk00)=(wk04)*(wk00)
+   769  0000D1   2B01(1)  	clr	wk01
+   770  0000D2             mul_hex2b1:
+   771  0000D2   2B05(1)  	clr	wk05
+   772  0000D3             mul_hex2b: 
+   773  0000D3   3210(1)  	b0mov	r,#16			;(wk03wk02wk01wk00)=(wk05wk04)*(wk01wk00)
+   774  0000D4   2B03(1)  	clr	wk03
+   775  0000D5   2B02(1)  	clr    	wk02 
+   776  0000D6             mul_hex2b20:      
+   777  0000D6   6286(1)  	b0bclr	fc
+   778  0000D7   7800(1+S)  	b0bts1	wk00.0
+   779  0000D8   80DD(2)  	jmp	mul_hex2b30
+   780  0000D9   2E04(1)  	b0mov	a,wk04
+   781  0000DA   1302(1)       	add	wk02,a
+   782  0000DB   2E05(1)  	b0mov  	a,wk05
+   783  0000DC   1103(1)          adc	wk03,a
+   784  0000DD             mul_hex2b30:	
+   785  0000DD   0903(1)  	rrcm	wk03
+   786  0000DE   0902(1)  	rrcm	wk02
+   787  0000DF   0901(1)  	rrcm	wk01
+   788  0000E0   0900(1)  	rrcm	wk00
+   789  0000E1   2682(1+S)  	decms	r
+   790  0000E2   80D6(2)  	jmp	mul_hex2b20
+   791  0000E3   0E00(2)       	ret
+   792  0000E4              
+   793  0000E4              
+   794  0000E4             	include		main.asm 
+   795  0000E4             ;;****************************************
+   796  0000E4             ;;睡眠程序
+   797  0000E4             ;;****************************************
+   798  0000E4             power_down00:
+   799  0000E4   2B7F(1)  	clr	sys_bit
+   800  0000E5   C350(2)  	call	clr_ram	
+   801  0000E6             power_down:
+   802  0000E6   2D38(1)  	mov	a,#00111000b
+   803  0000E7   2FB8(1)  	b0mov	p0m,a
+   804  0000E8   2DE7(1)  	mov	a,#11100111b
+   805  0000E9   2FE0(1)  	b0mov	p0ur,a
+   806  0000EA             
+   807  0000EA   2D03(1)  	mov	a,#00000011b
+   808  0000EB   2FC1(1)  	b0mov	p1m,a
+   809  0000EC   2F8B(1)  	b0mov	p2seg,a			;;设置为LCD
+   810  0000ED   2FC2(1)  	b0mov	p2m,a			;;设置输出1
+   811  0000EE   2FE1(1)  	b0mov	p1ur,a
+   812  0000EF   2FD2(1)  	b0mov	p2,a
+   813  0000F0             
+   814  0000F0   60DA(1)  	B0BCLR	FPWM0OUT
+   815  0000F1   67E2(1)  	b0bclr	FUTXEN			;Enable UART TX. UTX pin exchanges from GPIO mode to UART TX mode and idle high 
+   816  0000F2   67E3(1)  	b0bclr	FURXEN		;Enable UART RX. URX pin exchanges from GPIO mode to UART RX mode
+   817  0000F3   2D00(1)  	mov	a,#00h
+   818  0000F4   2FD0(1)  	b0mov	p0,a
+   819  0000F5   2FD3(1)  	b0mov	p3,a
+   820  0000F6   2FD1(1)  	B0MOV	P1,A
+   821  0000F7   2F8C(1)  	b0mov	p3seg,a			;;设置为LCD
+   822  0000F8             
+   823  0000F8             
+   824  0000F8   2F91(1)  	b0mov	CHS,a
+   825  0000F9   2F90(1)  	b0mov	VREG,a			;;关闭稳压器输出
+   826  0000FA   2F92(1)  	b0mov	AMPM,a			;;禁制PGIA
+   827  0000FB   2F93(1)  	b0mov	adcm1,a			;;
+   828  0000FC             ;	b0mov	adcm2,a			;;
+   829  0000FC             ;	b0mov	LCDM2,a			;;
+   830  0000FC   2F95(1)  	b0mov	LBTM,a
+   831  0000FD   2DF3(1)  	MOV	A,#0F3H
+   832  0000FE   2F89(1)  	B0MOV	LCDM1,A
+   833  0000FF             ;;****************************************
+   834  0000FF             ;=====================================================================
+   835  0000FF             power_down20:
+   836  0000FF   6BCA(1)  	b0bset	fcpum0			;去睡眠模式
+   837  000100   0000(1)  	nop
+   838  000101   6478(1)  	b0bclr	f_power_on
+   839  000102             ;=====================================================================
+   840  000102             reset:
+   841  000102   2D7F(1)  	mov 	a,#07fh			;initial stack pointer and
+   842  000103   2FDF(1)     	b0mov 	stkp,a			;disable global interrupt
+   843  000104   2D00(1)  	mov     a,#00h			
+   844  000105   2FCA(1)  	b0mov   oscm,a
+   845  000106   3700(1)  	b0mov	rbank,#00
+   846  000107             
+   847  000107   7478(1+S)  	b0bts0	f_power_on
+   848  000108   80E4(2)  	jmp	power_down00
+   849  000109             reset10:
+   850  000109   2ED0(1)  	b0mov	a,p0
+   851  00010A   1DFF(1)  	xor	a,#0ffh
+   852  00010B   2A01(1)  	and	a,#00000001b
+   853  00010C             	jz	power_down
+   854  00010C   7086(1+S)  	b0bts0	FZ
+   855  00010D   80E6(2)  		jmp	power_down
+   856  00010E             ;=====================================================================	
+   857  00010E             reset20:
+   858  00010E   C350(2)  	call	clr_ram
+   859  00010F   C2E7(2)  	call	cpu_init		;cpu initializtion
+   860  000110             reset60:	
+   861  000110             ;==============================================================
+   862  000110             
+   863  000110             main:
+   864  000110             			
+   865  000110             ;;*********************************************************
+   866  000110             main01:	
+   867  000110             ;	call	read_key
+   868  000110             ;	call	key_app
+   869  000110             ;	call	display_app
+   870  000110   C2E7(2)  	call	cpu_init		;cpu initializtion
+   871  000111             
+   872  000111   CA4D(2)          CALL    WRITE_00
+   873  000112   2D00(1)          MOV     A,#00000000b
+   874  000113   1F1D(1)          MOV     WORD_ADR_M,A
+   875  000114   2D00(1)          MOV     A,#00000000b
+   876  000115   1F1E(1)          MOV     WORD_ADR_L,A
+   877  000116   C9BC(2)          CALL    I2C_WRITEBYTES
+   878  000117   2D00(1)          MOV     A,#00000000b
+   879  000118   1F1D(1)          MOV     WORD_ADR_M,A
+   880  000119   2D01(1)          MOV     A,#00000001b
+   881  00011A   1F1E(1)          MOV     WORD_ADR_L,A
+   882  00011B   C9E7(2)          CALL    I2C_READBYTES_RANDROM_READ
+   883  00011C   0000(1)          NOP
+   884  00011D                   
+   885  00011D             ;;****************************************
+   886  00011D   FFFF(2)  dw	0ffffh
+   887  00011E   FFFF(2)  dw	0ffffh
+   888  00011F   FFFF(2)  dw	0ffffh
+   889  000120   FFFF(2)  dw	0ffffh
+   890  000121   FFFF(2)  dw	0ffffh
+   891  000122   FFFF(2)  dw	0ffffh
+   892  000123   FFFF(2)  dw	0ffffh
+   893  000124   FFFF(2)  dw	0ffffh
+   894  000125   FFFF(2)  dw	0ffffh
+   895  000126   FFFF(2)  dw	0ffffh
+   896  000127   FFFF(2)  dw	0ffffh
+   897  000128   FFFF(2)  dw	0ffffh
+   898  000129   FFFF(2)  dw	0ffffh
+   899  00012A   FFFF(2)  dw	0ffffh
+   900  00012B   FFFF(2)  dw	0ffffh
+   901  00012C   FFFF(2)  dw	0ffffh
+   902  00012D   FFFF(2)  dw	0ffffh
+   903  00012E   FFFF(2)  dw	0ffffh
+   904  00012F   FFFF(2)  dw	0ffffh
+   905  000130   FFFF(2)  dw	0ffffh
+   906  000131   FFFF(2)  dw	0ffffh
+   907  000132   FFFF(2)  dw	0ffffh
+   908  000133   FFFF(2)  dw	0ffffh
+   909  000134   FFFF(2)  dw	0ffffh
+   910  000135   FFFF(2)  dw	0ffffh
+   911  000136   FFFF(2)  dw	0ffffh
+   912  000137   FFFF(2)  dw	0ffffh
+   913  000138   FFFF(2)  dw	0ffffh
+   914  000139   FFFF(2)  dw	0ffffh
+   915  00013A   FFFF(2)  dw	0ffffh
+   916  00013B   FFFF(2)  dw	0ffffh
+   917  00013C   FFFF(2)  dw	0ffffh
+   918  00013D   FFFF(2)  dw	0ffffh
+   919  00013E   FFFF(2)  dw	0ffffh
+   920  00013F   FFFF(2)  dw	0ffffh
+   921  000140   FFFF(2)  dw	0ffffh
+   922  000141   FFFF(2)  dw	0ffffh
+   923  000142   FFFF(2)  dw	0ffffh
+   924  000143   FFFF(2)  dw	0ffffh
+   925  000144   FFFF(2)  dw	0ffffh
+   926  000145   FFFF(2)  dw	0ffffh
+   927  000146   FFFF(2)  dw	0ffffh
+   928  000147   FFFF(2)  dw	0ffffh
+   929  000148   FFFF(2)  dw	0ffffh
+   930  000149   FFFF(2)  dw	0ffffh
+   931  00014A   FFFF(2)  dw	0ffffh
+   932  00014B   FFFF(2)  dw	0ffffh
+   933  00014C   FFFF(2)  dw	0ffffh
+   934  00014D   FFFF(2)  dw	0ffffh
+   935  00014E   FFFF(2)  dw	0ffffh
+   936  00014F   FFFF(2)  dw	0ffffh
+   937  000150   FFFF(2)  dw	0ffffh
+   938  000151   FFFF(2)  dw	0ffffh
+   939  000152   FFFF(2)  dw	0ffffh
+   940  000153   FFFF(2)  dw	0ffffh
+   941  000154   FFFF(2)  dw	0ffffh
+   942  000155   FFFF(2)  dw	0ffffh
+   943  000156   FFFF(2)  dw	0ffffh
+   944  000157   FFFF(2)  dw	0ffffh
+   945  000158   FFFF(2)  dw	0ffffh
+   946  000159   FFFF(2)  dw	0ffffh
+   947  00015A   FFFF(2)  dw	0ffffh
+   948  00015B   FFFF(2)  dw	0ffffh
+   949  00015C   FFFF(2)  dw	0ffffh
+   950  00015D   FFFF(2)  dw	0ffffh
+   951  00015E   FFFF(2)  dw	0ffffh
+   952  00015F   FFFF(2)  dw	0ffffh
+   953  000160   FFFF(2)  dw	0ffffh
+   954  000161   FFFF(2)  dw	0ffffh
+   955  000162   FFFF(2)  dw	0ffffh
+   956  000163   FFFF(2)  dw	0ffffh
+   957  000164   FFFF(2)  dw	0ffffh
+   958  000165   FFFF(2)  dw	0ffffh
+   959  000166   FFFF(2)  dw	0ffffh
+   960  000167   FFFF(2)  dw	0ffffh
+   961  000168   FFFF(2)  dw	0ffffh
+   962  000169   FFFF(2)  dw	0ffffh
+   963  00016A   FFFF(2)  dw	0ffffh
+   964  00016B   FFFF(2)  dw	0ffffh
+   965  00016C   FFFF(2)  dw	0ffffh
+   966  00016D   FFFF(2)  dw	0ffffh
+   967  00016E   FFFF(2)  dw	0ffffh
+   968  00016F   FFFF(2)  dw	0ffffh
+   969  000170   FFFF(2)  dw	0ffffh
+   970  000171   FFFF(2)  dw	0ffffh
+   971  000172   FFFF(2)  dw	0ffffh
+   972  000173   FFFF(2)  dw	0ffffh
+   973  000174   FFFF(2)  dw	0ffffh
+   974  000175   FFFF(2)  dw	0ffffh
+   975  000176   FFFF(2)  dw	0ffffh
+   976  000177   FFFF(2)  dw	0ffffh
+   977  000178   FFFF(2)  dw	0ffffh
+   978  000179   FFFF(2)  dw	0ffffh
+   979  00017A   FFFF(2)  dw	0ffffh
+   980  00017B   FFFF(2)  dw	0ffffh
+   981  00017C   FFFF(2)  dw	0ffffh
+   982  00017D   FFFF(2)  dw	0ffffh
+   983  00017E   FFFF(2)  dw	0ffffh
+   984  00017F   FFFF(2)  dw	0ffffh
+   985  000180   FFFF(2)  dw	0ffffh
+   986  000181   FFFF(2)  dw	0ffffh
+   987  000182   FFFF(2)  dw	0ffffh
+   988  000183   FFFF(2)  dw	0ffffh
+   989  000184   FFFF(2)  dw	0ffffh
+   990  000185   FFFF(2)  dw	0ffffh
+   991  000186   FFFF(2)  dw	0ffffh
+   992  000187   FFFF(2)  dw	0ffffh
+   993  000188   FFFF(2)  dw	0ffffh
+   994  000189   FFFF(2)  dw	0ffffh
+   995  00018A   FFFF(2)  dw	0ffffh
+   996  00018B   FFFF(2)  dw	0ffffh
+   997  00018C   FFFF(2)  dw	0ffffh
+   998  00018D   FFFF(2)  dw	0ffffh
+   999  00018E   FFFF(2)  dw	0ffffh
+  1000  00018F   FFFF(2)  dw	0ffffh
+  1001  000190   FFFF(2)  dw	0ffffh
+  1002  000191   FFFF(2)  dw	0ffffh
+  1003  000192   FFFF(2)  dw	0ffffh
+  1004  000193   FFFF(2)  dw	0ffffh
+  1005  000194   FFFF(2)  dw	0ffffh
+  1006  000195   FFFF(2)  dw	0ffffh
+  1007  000196   FFFF(2)  dw	0ffffh
+  1008  000197   FFFF(2)  dw	0ffffh
+  1009  000198   FFFF(2)  dw	0ffffh
+  1010  000199   FFFF(2)  dw	0ffffh
+  1011  00019A   FFFF(2)  dw	0ffffh
+  1012  00019B   FFFF(2)  dw	0ffffh
+  1013  00019C   FFFF(2)  dw	0ffffh
+  1014  00019D   FFFF(2)  dw	0ffffh
+  1015  00019E   FFFF(2)  dw	0ffffh
+  1016  00019F   FFFF(2)  dw	0ffffh
+  1017  0001A0   FFFF(2)  dw	0ffffh
+  1018  0001A1   FFFF(2)  dw	0ffffh
+  1019  0001A2   FFFF(2)  dw	0ffffh
+  1020  0001A3   FFFF(2)  dw	0ffffh
+  1021  0001A4   FFFF(2)  dw	0ffffh
+  1022  0001A5   FFFF(2)  dw	0ffffh
+  1023  0001A6   FFFF(2)  dw	0ffffh
+  1024  0001A7   FFFF(2)  dw	0ffffh
+  1025  0001A8   FFFF(2)  dw	0ffffh
+  1026  0001A9   FFFF(2)  dw	0ffffh
+  1027  0001AA   FFFF(2)  dw	0ffffh
+  1028  0001AB   FFFF(2)  dw	0ffffh
+  1029  0001AC   FFFF(2)  dw	0ffffh
+  1030  0001AD   FFFF(2)  dw	0ffffh
+  1031  0001AE   FFFF(2)  dw	0ffffh
+  1032  0001AF   FFFF(2)  dw	0ffffh
+  1033  0001B0   FFFF(2)  dw	0ffffh
+  1034  0001B1   FFFF(2)  dw	0ffffh
+  1035  0001B2   FFFF(2)  dw	0ffffh
+  1036  0001B3   FFFF(2)  dw	0ffffh
+  1037  0001B4   FFFF(2)  dw	0ffffh
+  1038  0001B5   FFFF(2)  dw	0ffffh
+  1039  0001B6   FFFF(2)  dw	0ffffh
+  1040  0001B7   FFFF(2)  dw	0ffffh
+  1041  0001B8   FFFF(2)  dw	0ffffh
+  1042  0001B9   FFFF(2)  dw	0ffffh
+  1043  0001BA   FFFF(2)  dw	0ffffh
+  1044  0001BB   FFFF(2)  dw	0ffffh
+  1045  0001BC   FFFF(2)  dw	0ffffh
+  1046  0001BD   FFFF(2)  dw	0ffffh
+  1047  0001BE   FFFF(2)  dw	0ffffh
+  1048  0001BF   FFFF(2)  dw	0ffffh
+  1049  0001C0   FFFF(2)  dw	0ffffh
+  1050  0001C1   FFFF(2)  dw	0ffffh
+  1051  0001C2   FFFF(2)  dw	0ffffh
+  1052  0001C3   FFFF(2)  dw	0ffffh
+  1053  0001C4   FFFF(2)  dw	0ffffh
+  1054  0001C5   FFFF(2)  dw	0ffffh
+  1055  0001C6   FFFF(2)  dw	0ffffh
+  1056  0001C7   FFFF(2)  dw	0ffffh
+  1057  0001C8   FFFF(2)  dw	0ffffh
+  1058  0001C9   FFFF(2)  dw	0ffffh
+  1059  0001CA   FFFF(2)  dw	0ffffh
+  1060  0001CB   FFFF(2)  dw	0ffffh
+  1061  0001CC   FFFF(2)  dw	0ffffh
+  1062  0001CD   FFFF(2)  dw	0ffffh
+  1063  0001CE   FFFF(2)  dw	0ffffh
+  1064  0001CF   FFFF(2)  dw	0ffffh
+  1065  0001D0   FFFF(2)  dw	0ffffh
+  1066  0001D1   FFFF(2)  dw	0ffffh
+  1067  0001D2   FFFF(2)  dw	0ffffh
+  1068  0001D3   FFFF(2)  dw	0ffffh
+  1069  0001D4   FFFF(2)  dw	0ffffh
+  1070  0001D5   FFFF(2)  dw	0ffffh
+  1071  0001D6   FFFF(2)  dw	0ffffh
+  1072  0001D7   FFFF(2)  dw	0ffffh
+  1073  0001D8   FFFF(2)  dw	0ffffh
+  1074  0001D9   FFFF(2)  dw	0ffffh
+  1075  0001DA   FFFF(2)  dw	0ffffh
+  1076  0001DB   FFFF(2)  dw	0ffffh
+  1077  0001DC   FFFF(2)  dw	0ffffh
+  1078  0001DD   FFFF(2)  dw	0ffffh
+  1079  0001DE   FFFF(2)  dw	0ffffh
+  1080  0001DF   FFFF(2)  dw	0ffffh
+  1081  0001E0   FFFF(2)  dw	0ffffh
+  1082  0001E1   FFFF(2)  dw	0ffffh
+  1083  0001E2   FFFF(2)  dw	0ffffh
+  1084  0001E3   FFFF(2)  dw	0ffffh
+  1085  0001E4   FFFF(2)  dw	0ffffh
+  1086  0001E5   FFFF(2)  dw	0ffffh
+  1087  0001E6   FFFF(2)  dw	0ffffh
+  1088  0001E7   FFFF(2)  dw	0ffffh
+  1089  0001E8   FFFF(2)  dw	0ffffh
+  1090  0001E9   FFFF(2)  dw	0ffffh
+  1091  0001EA   FFFF(2)  dw	0ffffh
+  1092  0001EB   FFFF(2)  dw	0ffffh
+  1093  0001EC   FFFF(2)  dw	0ffffh
+  1094  0001ED   FFFF(2)  dw	0ffffh
+  1095  0001EE   FFFF(2)  dw	0ffffh
+  1096  0001EF   FFFF(2)  dw	0ffffh
+  1097  0001F0   FFFF(2)  dw	0ffffh
+  1098  0001F1   FFFF(2)  dw	0ffffh
+  1099  0001F2   FFFF(2)  dw	0ffffh
+  1100  0001F3   FFFF(2)  dw	0ffffh
+  1101  0001F4   FFFF(2)  dw	0ffffh
+  1102  0001F5   FFFF(2)  dw	0ffffh
+  1103  0001F6   FFFF(2)  dw	0ffffh
+  1104  0001F7   FFFF(2)  dw	0ffffh
+  1105  0001F8   FFFF(2)  dw	0ffffh
+  1106  0001F9   FFFF(2)  dw	0ffffh
+  1107  0001FA   FFFF(2)  dw	0ffffh
+  1108  0001FB   FFFF(2)  dw	0ffffh
+  1109  0001FC   FFFF(2)  dw	0ffffh
+  1110  0001FD   FFFF(2)  dw	0ffffh
+  1111  0001FE   FFFF(2)  dw	0ffffh
+  1112  0001FF   FFFF(2)  dw	0ffffh
+  1113  000200   FFFF(2)  dw	0ffffh
+  1114  000201   FFFF(2)  dw	0ffffh
+  1115  000202   FFFF(2)  dw	0ffffh
+  1116  000203   FFFF(2)  dw	0ffffh
+  1117  000204   FFFF(2)  dw	0ffffh
+  1118  000205   FFFF(2)  dw	0ffffh
+  1119  000206   FFFF(2)  dw	0ffffh
+  1120  000207   FFFF(2)  dw	0ffffh
+  1121  000208   FFFF(2)  dw	0ffffh
+  1122  000209   FFFF(2)  dw	0ffffh
+  1123  00020A   FFFF(2)  dw	0ffffh
+  1124  00020B   FFFF(2)  dw	0ffffh
+  1125  00020C   FFFF(2)  dw	0ffffh
+  1126  00020D   FFFF(2)  dw	0ffffh
+  1127  00020E   FFFF(2)  dw	0ffffh
+  1128  00020F   FFFF(2)  dw	0ffffh
+  1129  000210   FFFF(2)  dw	0ffffh
+  1130  000211   FFFF(2)  dw	0ffffh
+  1131  000212   FFFF(2)  dw	0ffffh
+  1132  000213   FFFF(2)  dw	0ffffh
+  1133  000214   FFFF(2)  dw	0ffffh
+  1134  000215   FFFF(2)  dw	0ffffh
+  1135  000216   FFFF(2)  dw	0ffffh
+  1136  000217   FFFF(2)  dw	0ffffh
+  1137  000218   FFFF(2)  dw	0ffffh
+  1138  000219   FFFF(2)  dw	0ffffh
+  1139  00021A   FFFF(2)  dw	0ffffh
+  1140  00021B   FFFF(2)  dw	0ffffh
+  1141  00021C   FFFF(2)  dw	0ffffh
+  1142  00021D   FFFF(2)  dw	0ffffh
+  1143  00021E   FFFF(2)  dw	0ffffh
+  1144  00021F   FFFF(2)  dw	0ffffh
+  1145  000220   FFFF(2)  dw	0ffffh
+  1146  000221   FFFF(2)  dw	0ffffh
+  1147  000222   FFFF(2)  dw	0ffffh
+  1148  000223   FFFF(2)  dw	0ffffh
+  1149  000224   FFFF(2)  dw	0ffffh
+  1150  000225   FFFF(2)  dw	0ffffh
+  1151  000226   FFFF(2)  dw	0ffffh
+  1152  000227   FFFF(2)  dw	0ffffh
+  1153  000228   FFFF(2)  dw	0ffffh
+  1154  000229   FFFF(2)  dw	0ffffh
+  1155  00022A   FFFF(2)  dw	0ffffh
+  1156  00022B   FFFF(2)  dw	0ffffh
+  1157  00022C   FFFF(2)  dw	0ffffh
+  1158  00022D   FFFF(2)  dw	0ffffh
+  1159  00022E   FFFF(2)  dw	0ffffh
+  1160  00022F   FFFF(2)  dw	0ffffh
+  1161  000230   FFFF(2)  dw	0ffffh
+  1162  000231   FFFF(2)  dw	0ffffh
+  1163  000232   FFFF(2)  dw	0ffffh
+  1164  000233   FFFF(2)  dw	0ffffh
+  1165  000234   FFFF(2)  dw	0ffffh
+  1166  000235   FFFF(2)  dw	0ffffh
+  1167  000236   FFFF(2)  dw	0ffffh
+  1168  000237   FFFF(2)  dw	0ffffh
+  1169  000238   FFFF(2)  dw	0ffffh
+  1170  000239   FFFF(2)  dw	0ffffh
+  1171  00023A   FFFF(2)  dw	0ffffh
+  1172  00023B   FFFF(2)  dw	0ffffh
+  1173  00023C   FFFF(2)  dw	0ffffh
+  1174  00023D   FFFF(2)  dw	0ffffh
+  1175  00023E   FFFF(2)  dw	0ffffh
+  1176  00023F   FFFF(2)  dw	0ffffh
+  1177  000240   FFFF(2)  dw	0ffffh
+  1178  000241   FFFF(2)  dw	0ffffh
+  1179  000242   FFFF(2)  dw	0ffffh
+  1180  000243   FFFF(2)  dw	0ffffh
+  1181  000244   FFFF(2)  dw	0ffffh
+  1182  000245   FFFF(2)  dw	0ffffh
+  1183  000246   FFFF(2)  dw	0ffffh
+  1184  000247   FFFF(2)  dw	0ffffh
+  1185  000248   FFFF(2)  dw	0ffffh
+  1186  000249   FFFF(2)  dw	0ffffh
+  1187  00024A   FFFF(2)  dw	0ffffh
+  1188  00024B   FFFF(2)  dw	0ffffh
+  1189  00024C   FFFF(2)  dw	0ffffh
+  1190  00024D   FFFF(2)  dw	0ffffh
+  1191  00024E   FFFF(2)  dw	0ffffh
+  1192  00024F   FFFF(2)  dw	0ffffh
+  1193  000250   FFFF(2)  dw	0ffffh
+  1194  000251   FFFF(2)  dw	0ffffh
+  1195  000252   FFFF(2)  dw	0ffffh
+  1196  000253   FFFF(2)  dw	0ffffh
+  1197  000254   FFFF(2)  dw	0ffffh
+  1198  000255   FFFF(2)  dw	0ffffh
+  1199  000256   FFFF(2)  dw	0ffffh
+  1200  000257   FFFF(2)  dw	0ffffh
+  1201  000258   FFFF(2)  dw	0ffffh
+  1202  000259   FFFF(2)  dw	0ffffh
+  1203  00025A   FFFF(2)  dw	0ffffh
+  1204  00025B   FFFF(2)  dw	0ffffh
+  1205  00025C   FFFF(2)  dw	0ffffh
+  1206  00025D   FFFF(2)  dw	0ffffh
+  1207  00025E   FFFF(2)  dw	0ffffh
+  1208  00025F   FFFF(2)  dw	0ffffh
+  1209  000260   FFFF(2)  dw	0ffffh
+  1210  000261   FFFF(2)  dw	0ffffh
+  1211  000262   FFFF(2)  dw	0ffffh
+  1212  000263   FFFF(2)  dw	0ffffh
+  1213  000264   FFFF(2)  dw	0ffffh
+  1214  000265   FFFF(2)  dw	0ffffh
+  1215  000266   FFFF(2)  dw	0ffffh
+  1216  000267   FFFF(2)  dw	0ffffh
+  1217  000268   FFFF(2)  dw	0ffffh
+  1218  000269   FFFF(2)  dw	0ffffh
+  1219  00026A   FFFF(2)  dw	0ffffh
+  1220  00026B   FFFF(2)  dw	0ffffh
+  1221  00026C   FFFF(2)  dw	0ffffh
+  1222  00026D   FFFF(2)  dw	0ffffh
+  1223  00026E   FFFF(2)  dw	0ffffh
+  1224  00026F   FFFF(2)  dw	0ffffh
+  1225  000270   FFFF(2)  dw	0ffffh
+  1226  000271   FFFF(2)  dw	0ffffh
+  1227  000272   FFFF(2)  dw	0ffffh
+  1228  000273   FFFF(2)  dw	0ffffh
+  1229  000274   FFFF(2)  dw	0ffffh
+  1230  000275   FFFF(2)  dw	0ffffh
+  1231  000276   FFFF(2)  dw	0ffffh
+  1232  000277   FFFF(2)  dw	0ffffh
+  1233  000278   FFFF(2)  dw	0ffffh
+  1234  000279   FFFF(2)  dw	0ffffh
+  1235  00027A   FFFF(2)  dw	0ffffh
+  1236  00027B   FFFF(2)  dw	0ffffh
+  1237  00027C   FFFF(2)  dw	0ffffh
+  1238  00027D   FFFF(2)  dw	0ffffh
+  1239  00027E   FFFF(2)  dw	0ffffh
+  1240  00027F   FFFF(2)  dw	0ffffh
+  1241  000280   FFFF(2)  dw	0ffffh
+  1242  000281   FFFF(2)  dw	0ffffh
+  1243  000282   FFFF(2)  dw	0ffffh
+  1244  000283   FFFF(2)  dw	0ffffh
+  1245  000284   FFFF(2)  dw	0ffffh
+  1246  000285   FFFF(2)  dw	0ffffh
+  1247  000286   FFFF(2)  dw	0ffffh
+  1248  000287   FFFF(2)  dw	0ffffh
+  1249  000288   FFFF(2)  dw	0ffffh
+  1250  000289   FFFF(2)  dw	0ffffh
+  1251  00028A   FFFF(2)  dw	0ffffh
+  1252  00028B   FFFF(2)  dw	0ffffh
+  1253  00028C   FFFF(2)  dw	0ffffh
+  1254  00028D   FFFF(2)  dw	0ffffh
+  1255  00028E   FFFF(2)  dw	0ffffh
+  1256  00028F   FFFF(2)  dw	0ffffh
+  1257  000290   FFFF(2)  dw	0ffffh
+  1258  000291   FFFF(2)  dw	0ffffh
+  1259  000292   FFFF(2)  dw	0ffffh
+  1260  000293   FFFF(2)  dw	0ffffh
+  1261  000294   FFFF(2)  dw	0ffffh
+  1262  000295   FFFF(2)  dw	0ffffh
+  1263  000296   FFFF(2)  dw	0ffffh
+  1264  000297   FFFF(2)  dw	0ffffh
+  1265  000298   FFFF(2)  dw	0ffffh
+  1266  000299   FFFF(2)  dw	0ffffh
+  1267  00029A   FFFF(2)  dw	0ffffh
+  1268  00029B   FFFF(2)  dw	0ffffh
+  1269  00029C   FFFF(2)  dw	0ffffh
+  1270  00029D   FFFF(2)  dw	0ffffh
+  1271  00029E   FFFF(2)  dw	0ffffh
+  1272  00029F   FFFF(2)  dw	0ffffh
+  1273  0002A0   FFFF(2)  dw	0ffffh
+  1274  0002A1   FFFF(2)  dw	0ffffh
+  1275  0002A2   FFFF(2)  dw	0ffffh
+  1276  0002A3   FFFF(2)  dw	0ffffh
+  1277  0002A4   FFFF(2)  dw	0ffffh
+  1278  0002A5   FFFF(2)  dw	0ffffh
+  1279  0002A6   FFFF(2)  dw	0ffffh
+  1280  0002A7   FFFF(2)  dw	0ffffh
+  1281  0002A8   FFFF(2)  dw	0ffffh
+  1282  0002A9   FFFF(2)  dw	0ffffh
+  1283  0002AA   FFFF(2)  dw	0ffffh
+  1284  0002AB   FFFF(2)  dw	0ffffh
+  1285  0002AC   FFFF(2)  dw	0ffffh
+  1286  0002AD   FFFF(2)  dw	0ffffh
+  1287  0002AE   FFFF(2)  dw	0ffffh
+  1288  0002AF   FFFF(2)  dw	0ffffh
+  1289  0002B0   FFFF(2)  dw	0ffffh
+  1290  0002B1   FFFF(2)  dw	0ffffh
+  1291  0002B2   FFFF(2)  dw	0ffffh
+  1292  0002B3   FFFF(2)  dw	0ffffh
+  1293  0002B4   FFFF(2)  dw	0ffffh
+  1294  0002B5   FFFF(2)  dw	0ffffh
+  1295  0002B6   FFFF(2)  dw	0ffffh
+  1296  0002B7   FFFF(2)  dw	0ffffh
+  1297  0002B8   FFFF(2)  dw	0ffffh
+  1298  0002B9   FFFF(2)  dw	0ffffh
+  1299  0002BA   FFFF(2)  dw	0ffffh
+  1300  0002BB   FFFF(2)  dw	0ffffh
+  1301  0002BC   FFFF(2)  dw	0ffffh
+  1302  0002BD   FFFF(2)  dw	0ffffh
+  1303  0002BE   FFFF(2)  dw	0ffffh
+  1304  0002BF   FFFF(2)  dw	0ffffh
+  1305  0002C0   FFFF(2)  dw	0ffffh
+  1306  0002C1   FFFF(2)  dw	0ffffh
+  1307  0002C2   FFFF(2)  dw	0ffffh
+  1308  0002C3   FFFF(2)  dw	0ffffh
+  1309  0002C4   FFFF(2)  dw	0ffffh
+  1310  0002C5   FFFF(2)  dw	0ffffh
+  1311  0002C6   FFFF(2)  dw	0ffffh
+  1312  0002C7   FFFF(2)  dw	0ffffh
+  1313  0002C8   FFFF(2)  dw	0ffffh
+  1314  0002C9   FFFF(2)  dw	0ffffh
+  1315  0002CA   FFFF(2)  dw	0ffffh
+  1316  0002CB   FFFF(2)  dw	0ffffh
+  1317  0002CC   FFFF(2)  dw	0ffffh
+  1318  0002CD   FFFF(2)  dw	0ffffh
+  1319  0002CE   FFFF(2)  dw	0ffffh
+  1320  0002CF   FFFF(2)  dw	0ffffh
+  1321  0002D0   FFFF(2)  dw	0ffffh
+  1322  0002D1   FFFF(2)  dw	0ffffh
+  1323  0002D2   FFFF(2)  dw	0ffffh
+  1324  0002D3   FFFF(2)  dw	0ffffh
+  1325  0002D4   FFFF(2)  dw	0ffffh
+  1326  0002D5   FFFF(2)  dw	0ffffh
+  1327  0002D6   FFFF(2)  dw	0ffffh
+  1328  0002D7   FFFF(2)  dw	0ffffh
+  1329  0002D8   FFFF(2)  dw	0ffffh
+  1330  0002D9   FFFF(2)  dw	0ffffh
+  1331  0002DA   FFFF(2)  dw	0ffffh
+  1332  0002DB   FFFF(2)  dw	0ffffh
+  1333  0002DC   FFFF(2)  dw	0ffffh
+  1334  0002DD   FFFF(2)  dw	0ffffh
+  1335  0002DE   FFFF(2)  dw	0ffffh
+  1336  0002DF   FFFF(2)  dw	0ffffh
+  1337  0002E0   FFFF(2)  dw	0ffffh
+  1338  0002E1   FFFF(2)  dw	0ffffh
+  1339  0002E2   FFFF(2)  dw	0ffffh
+  1340  0002E3   FFFF(2)  dw	0ffffh
+  1341  0002E4   FFFF(2)  dw	0ffffh
+  1342  0002E5   FFFF(2)  dw	0ffffh
+  1343  0002E6   FFFF(2)  dw	0ffffh
+  1344  0002E7             
+  1345  0002E7             
+  1346  0002E7             	
+  1347  0002E7             
+  1348  0002E7             
+  1349  0002E7             
+  1350  0002E7             
+  1351  0002E7             
+  1352  0002E7             	include		init.asm
+  1353  0002E7             ;*****************************************************************
+  1354  0002E7             ;NAME:			cpu_init
+  1355  0002E7             ;INPUT:			
+  1356  0002E7             ;FUNCTION:		
+  1357  0002E7             ;DESCRIBE:		NONE
+  1358  0002E7             ;CALL SUBPROGRAM:	NONE
+  1359  0002E7             ;USING RESOURCE:	
+  1360  0002E7             ;STACK NEED:		0
+  1361  0002E7             ;OUTPUT:		
+  1362  0002E7             ;*****************************************************************
+  1363  0002E7             cpu_init:
+  1364  0002E7             clr_writedata00:
+  1365  0002E7   3100(1)          B0MOV   H,#WRITEDATA$M
+  1366  0002E8   3022(1)          B0MOV   L,#WRITEDATA$L
+  1367  0002E9   1E80(1)          MOV     A,L
+  1368  0002EA   140F(1)          ADD     A,#0FH
+  1369  0002EB   1F43(1)          MOV     N01,A
+  1370  0002EC             clr_writedata01:
+  1371  0002EC   2BE8(1)          CLR     @HL
+  1372  0002ED   1680(1+S)          INCMS   L
+  1373  0002EE                     CJBE_   L,N01,clr_writedata01
+  1374  0002EE   1E43(1)  	mov	a, N01
+  1375  0002EF   0780(1+S)  	cmprs	a, L
+  1376  0002F0   7286(1+S)  	b0bts0	FC
+  1377  0002F1   82EC(2)  		jmp	clr_writedata01
+  1378  0002F2             clr_receivedata00:
+  1379  0002F2   3100(1)          B0MOV   H,#RECEIVEDATA$M
+  1380  0002F3   3032(1)          B0MOV   L,#RECEIVEDATA$L
+  1381  0002F4   1E80(1)          MOV     A,L
+  1382  0002F5   140F(1)          ADD     A,#0FH
+  1383  0002F6   1F43(1)          MOV     N01,A
+  1384  0002F7             clr_receivedata01:
+  1385  0002F7   2BE8(1)          CLR     @HL
+  1386  0002F8   1680(1+S)          INCMS   L
+  1387  0002F9                     CJBE_   L,N01,clr_receivedata01
+  1388  0002F9   1E43(1)  	mov	a, N01
+  1389  0002FA   0780(1+S)  	cmprs	a, L
+  1390  0002FB   7286(1+S)  	b0bts0	FC
+  1391  0002FC   82F7(2)  		jmp	clr_receivedata01
+  1392  0002FD                 ;    CJNE	
+  1393  0002FD             ;;I/O初始
+  1394  0002FD   2DD8(1)  	mov	a,#11011000b
+  1395  0002FE   2FB8(1)  	b0mov	p0m,a           ;设置p0.3 和p0.4和p0.6和p0.7为输出口 	
+  1396  0002FF             
+  1397  0002FF   2D02(1)  	mov	a,#00000010b    ;设置p1.1为输出口
+  1398  000300   2FC1(1)  	b0mov	p1m,a			
+  1399  000301             ;===============================================================
+  1400  000301             cpu_init10:
+  1401  000301   2D02(1)  	MOV	A,#00000010b
+  1402  000302   2F8A(1)  	b0mov	LCDM2,a			;;2.8V驱动
+  1403  000303              ;	mov	A,#0C1H
+  1404  000303   2D49(1)  	mov	A,#049H
+  1405  000304   2F89(1)  	b0mov	LCDM1,a			;;电容式驱动
+  1406  000305             ;===============================================================
+  1407  000305             cpu_init12:
+  1408  000305             ;;tc0设定
+  1409  000305   2DF0(1)    	mov 	a,#11110000b;    #0E0h ;#11110000B  110为4分频	;Fhosc/4   11110000 2分频    11010000 8分频；改变可控制速度                    
+  1410  000306   2FDA(1)  	b0mov 	tc0m,a 			; to set t0 clock = fcpu / 64                                                
+  1411  000307   2D1E(1)  	mov	a,#T_10MS                                         
+  1412  000308   2F64(1)  	b0mov	time_10ms,a                                    
+  1413  000309                            
+  1414  000309   2D80(1)          mov	a,#080h           ;#01000000B                                     
+  1415  00030A   2FDB(1)  	b0mov	TC0C,a   ;设TC0的初值
+  1416  00030B   2FDC(1)  	b0mov	TC0R,a   ;设TCO的预置值
+  1417  00030C             ;	b0bset	FTC0ENB    ;使能TCO，允许TC0累加
+  1418  00030C   6DC9(1)  	B0BSET	FTC0IEN   
+  1419  00030D             ;===============================================================
+  1420  00030D             LBT_init:                        
+  1421  00030D             ;低电设置
+  1422  00030D             ;	MOV	A,#11000011b
+  1423  00030D             ;	AND	LBTM,A
+  1424  00030D             	;MOV	A,#00000000b	; LBT < 2.2V
+  1425  00030D             ;	MOV	A,#00000100b	; LBT < 2.4V
+  1426  00030D             	;MOV	A,#00001000b	; LBT < 2.6V
+  1427  00030D             	;MOV	A,#00001100b	; LBT < 2.8V
+  1428  00030D             	;MOV	A,#00010000b	; LBT < 3.0V
+  1429  00030D             	;MOV	A,#00010100b	; LBT < 3.2V
+  1430  00030D             	;MOV	A,#00011000b	; LBT < 3.4V
+  1431  00030D             ;	MOV	A,#00011100b	; LBT < 3.6V
+  1432  00030D             ;	MOV	A,#01100000b	; LBT :P10 Input,P11 connect to GND @FP11IO=1
+  1433  00030D             ;	OR	LBTM,A	
+  1434  00030D             ;	mov	a,#0A0h 
+  1435  00030D   2D85(1)  	mov	a,#085h  ;a=#01000101B
+  1436  00030E   2F95(1)  	b0mov	LBTM,A
+  1437  00030F             ;===============================================================
+  1438  00030F             UART_Init:   
+  1439  00030F             ;	mov	A,#0xDD		;UART Baud Rate=115200	
+  1440  00030F   2DE6(1)  	mov	A,#0xE6		;UART Baud Rate=9600		
+  1441  000310   2FE4(1)  	b0mov	URCR,A
+  1442  000311   2D04(1)  	mov	A,#00000100b	;Fuart=Fhosc/1=8MHz
+  1443  000312             ;	mov	A,#00000000b	;Fuart=Fhosc/1=8MHz
+  1444  000312   1FE3(1)  	MOV	URRX,A
+  1445  000313             
+  1446  000313             ;	b0bclr	FUTXIRQ		;UART transmit interrupt request
+  1447  000313             ;	b0bset	FUTXIEN		;Enable UART transmit interrupt function
+  1448  000313             ;	b0bclr	FUTXIEN		;Disable UART transmit interrupt function.
+  1449  000313             //	b0bset	FUTXEN		;Enable UART TX. UTX pin exchanges from GPIO mode to UART TX mode and idle high status
+  1450  000313              
+  1451  000313             
+  1452  000313   63C8(1)  	b0bclr	FURXIRQ		;UART receive interrupt request
+  1453  000314             ;	b0bset	FURXIEN		;Enable UART receive interrupt function
+  1454  000314   6BC9(1)  	b0bset	FURXIEN		;Disable UART receive interrupt function
+  1455  000315   6FE3(1)  	b0bset	FURXEN		;Enable UART RX. URX pin exchanges from GPIO mode to UART RX mode
+  1456  000316             ;;***************************************
+  1457  000316             cpu_init13:
+  1458  000316   C320(2)  	call	init_cpr		;;初始化cpr
+  1459  000317   C336(2)  	call	init_TS	 
+  1460  000318             ;;******************************************
+  1461  000318             cpu_init14:
+  1462  000318   6FDF(1)  	b0bset	fgie
+  1463  000319             ;================================================================
+  1464  000319             cpu_init20:
+  1465  000319   2D0F(1)  	mov	a,#0fh
+  1466  00031A   C357(2)  	call	fill_lcd_ram	 	;;全显示
+  1467  00031B   C374(2)   	call	enable_grn_led
+  1468  00031C             ;================================================================
+  1469  00031C             cpu_init30:
+  1470  00031C   78D0(1+S)  	b0bts1	key_on_off
+  1471  00031D   831C(2)  	jmp	cpu_init30
+  1472  00031E   C329(2)  	call	update_timer	
+  1473  00031F             sys_init90:
+  1474  00031F   0E00(2)  	ret		
+  1475  000320             ;---------------------------------------------------------------
+  1476  000320             ;Voltage Charge Pump / Regulator (CPR) INIT
+  1477  000320             ;---------------------------------------------------------------
+  1478  000320             init_cpr:
+  1479  000320             ;========= BandGap Voltage ===============	
+  1480  000320   6F90(1)  	B0BSET	FBGRENB		; Enable Band Gap Reference voltage
+  1481  000321   2D89(1)   	MOV	A,#089h
+  1482  000322   2F90(1)  	B0MOV	VREG,A		;AVDDR=2.4V，AVE=1V
+  1483  000323   6D90(1)  	B0BSET	FAVENB		; AVE Enable
+  1484  000324   6A90(1)  	B0BSET	FAVDDRENB	; AVDDR Enable
+  1485  000325   C36A(2)  	call	wait10ms
+  1486  000326             ;****************************************************************
+  1487  000326             ;NAME:			update_timer
+  1488  000326             ;INPUT:			
+  1489  000326             ;FUNCTION:		
+  1490  000326             ;DESCRIBE:		
+  1491  000326             ;CALL SUBPROGRAM:	
+  1492  000326             ;USING RESOURCE:	
+  1493  000326             ;STACK NEED:		0
+  1494  000326             ;OUTPUT:		NONE
+  1495  000326             ;****************************************************************
+  1496  000326             update_timer00:
+  1497  000326   6F78(1)  	b0bset	f_flash	
+  1498  000327             	B0MOV_	flash_buf,#T_flash
+  1499  000327   2D32(1)  	mov	a, #T_flash
+  1500  000328   2F6A(1)  	b0mov	flash_buf, a
+  1501  000329             update_timer:	
+  1502  000329             	B0MOV_	timer_buf1,#100	;update auto turn off timer
+  1503  000329   2D64(1)  	mov	a, #100
+  1504  00032A   2F66(1)  	b0mov	timer_buf1, a
+  1505  00032B             update_timer10:
+  1506  00032B   3701(1)  	b0mov	rbank,#01
+  1507  00032C   2D3C(1)  	MOV	A,#60
+  1508  00032D   1F3E(1)  	MOV	timer_buf3,A
+  1509  00032E   1F3F(1)  	MOV	min,A
+  1510  00032F   2D05(1)  	mov	a,#05
+  1511  000330   2F69(1)  	b0mov	bl_base_time_buf,a
+  1512  000331             update_timer20:
+  1513  000331   3701(1)  	b0mov	rbank,#01
+  1514  000332   1E22(1)  	mov	a,turn_off_time
+  1515  000333   2F67(1)  	b0mov	timer_buf2,a
+  1516  000334   3700(1)  	b0mov	rbank,#00
+  1517  000335             update_timer90:	
+  1518  000335   0E00(2)  	ret
+  1519  000336             ;*********************************************************************************
+  1520  000336             ;NAME:			init_ts
+  1521  000336             ;INPUT:			
+  1522  000336             ;FUNCTION:		
+  1523  000336             ;DESCRIBE:		
+  1524  000336             ;CALL SUBPROGRAM:	
+  1525  000336             ;USING RESOURCE:	
+  1526  000336             ;STACK NEED:		0
+  1527  000336             ;OUTPUT:		NONE
+  1528  000336             ;*********************************************************************************
+  1529  000336             ;*********************************************************************************
+  1530  000336             ;NAME:			init_ts
+  1531  000336             ;INPUT:			
+  1532  000336             ;FUNCTION:		
+  1533  000336             ;DESCRIBE:		
+  1534  000336             ;CALL SUBPROGRAM:	
+  1535  000336             ;USING RESOURCE:	
+  1536  000336             ;STACK NEED:		0
+  1537  000336             ;OUTPUT:		NONE
+  1538  000336             ;*********************************************************************************
+  1539  000336             init_ts:	
+  1540  000336   C36A(2)  	call	wait10ms
+  1541  000337   2DAB(1)  	mov	a,#0ABH		;;TS: Al3 - Al4
+  1542  000338             init_ts01:
+  1543  000338   2F91(1)  	B0MOV	CHS,A			;;TS: Al3 - Al4
+  1544  000339             init_ts10:
+  1545  000339             
+  1546  000339   3701(1)  	B0MOV	RBANK,#01
+  1547  00033A   1E19(1)  	mov	a,init_ts_cnt		;;delay:16*1/20=0.8s	
+  1548  00033B   2F60(1)  	b0mov	sample_counter,a	;;
+  1549  00033C   1E1E(1)  	MOV	A,TS_AMPM
+  1550  00033D             init_ts80:
+  1551  00033D   2F92(1)  	B0MOV	AMPM,A
+  1552  00033E   1E20(1)  	MOV	A,ADCM_1
+  1553  00033F   2F93(1)  	B0MOV	ADCM1,A
+  1554  000340   1E21(1)  	MOV	A,ADCM_2
+  1555  000341   2F94(1)  	B0MOV	ADCM2,A
+  1556  000342   3700(1)   	B0MOV	RBANK,#00H
+  1557  000343             
+  1558  000343   6B93(1)  	B0BSET	FACHPENB	; ADC Chopper Enable (always set "1")
+  1559  000344   6893(1)  	B0BSET	FADCENB		; Enable ADC function
+  1560  000345   0E00(2)  	ret
+  1561  000346             ;**************************************************************
+  1562  000346             ;NAME:			init_tp
+  1563  000346             ;INPUT:			
+  1564  000346             ;FUNCTION:		
+  1565  000346             ;DESCRIBE:		
+  1566  000346             ;CALL SUBPROGRAM:	
+  1567  000346             ;USING RESOURCE:	
+  1568  000346             ;STACK NEED:		0
+  1569  000346             ;OUTPUT:		NONE
+  1570  000346             ;**************************************************************
+  1571  000346             init_tp:
+  1572  000346   2B61(1)  	clr	tpadc_counter
+  1573  000347   2D89(1)  	mov	a,#089H
+  1574  000348   2F91(1)  	B0MOV	CHS,A			;;TP: Al1 - Al2
+  1575  000349             
+  1576  000349   3701(1)  	b0mov	rbank,#01
+  1577  00034A   1E1C(1)  	mov	a,init_tp_cnt		;delay:16*1/25=0.6
+  1578  00034B   2F60(1)  	b0mov	sample_counter,a	;;
+  1579  00034C             
+  1580  00034C   6C92(1)  	B0BSET	FPCHPENB		; Enable PGIA chopper function
+  1581  00034D   6892(1)  	B0BSET	FAMPENB			; Enable PGIA function
+  1582  00034E             
+  1583  00034E   1E1F(1)  	MOV	A,TP_AMPM
+  1584  00034F   833D(2)  	jmp	init_ts80
+  1585  000350             ;****************************************************************
+  1586  000350             clr_ram:
+  1587  000350   337F(1)  	b0mov	z,#CLR_RAM_START1$l
+  1588  000351   3401(1)  	b0mov	y,#001h			;clear	bank1
+  1589  000352   2D00(1)  	mov	a,#00
+  1590  000353   C359(2)  	call	fill_ram_block
+  1591  000354             clr_ram10:
+  1592  000354   3400(1)  	b0mov	y,#00h			;clear	bank0	
+  1593  000355   337E(1)  	b0mov	z,#CLR_RAM_START
+  1594  000356   C359(2)  	call	fill_ram_block
+  1595  000357             ;;***************************************
+  1596  000357             fill_lcd_ram:
+  1597  000357   340F(1)  	b0mov	y,#0fh			;clear	bank15:lcd ram
+  1598  000358   330F(1)  	b0mov	z,#0fh
+  1599  000359             fill_ram_block:
+  1600  000359   1FE7(1)  	mov	@yz,a
+  1601  00035A   2683(1+S)  	decms	z
+  1602  00035B   8359(2)  	jmp	fill_ram_block
+  1603  00035C   1FE7(1)  	mov	@yz,a
+  1604  00035D   0E00(2)    	ret
+  1605  00035E             ;****************************************************************
+  1606  00035E             ;NAME:			DELAY10
+  1607  00035E             ;INPUT:			A
+  1608  00035E             ;FUNCTION:		DELAY TIME
+  1609  00035E             ;DESCRIBE:		(A)*10MS	MAX:256*10MS=2560MS=2.56S
+  1610  00035E             ;CALL SUBPROGRAM:	WAIT10MS
+  1611  00035E             ;USING RESOURCE:	R7,R6,WK07
+  1612  00035E             ;STACK NEED:		0 
+  1613  00035E             ;OUTPUT:		NONE
+  1614  00035E             ;*****************************************************************
+  1615  00035E             delay10ms:
+  1616  00035E   2D01(1)          MOV     A,#1
+  1617  00035F   8365(2)          JMP     DELAY
+  1618  000360             delay300ms:
+  1619  000360   2D0D(1)  	mov	a,#13
+  1620  000361   8365(2)  	jmp	delay
+  1621  000362             delay500ms:
+  1622  000362   2D32(1)  	mov	a,#50
+  1623  000363   8365(2)  	jmp	delay
+  1624  000364             delay1s:
+  1625  000364   2DC8(1)  	mov	a,#200
+  1626  000365             delay:
+  1627  000365   2F0A(1)  	b0mov	wk10,a
+  1628  000366             delay20:
+  1629  000366   C36A(2)  	call	wait10ms
+  1630  000367   260A(1+S)  	decms	wk10
+  1631  000368   8366(2)  	jmp	delay20
+  1632  000369   0E00(2)  	ret
+  1633  00036A             ;******************************************************************
+  1634  00036A             ;NAME:			WAIT10MS
+  1635  00036A             ;INPUT:			CRYSTAL_VAL*250/2/INSTRUCTION_CYCLE
+  1636  00036A             ;FUNCTION:		DELAY TIME
+  1637  00036A             ;DESCRIBE:		10MS
+  1638  00036A             ;CALL SUBPROGRAM:	NONE
+  1639  00036A             ;USING RESOURCE:	R7,R6,WK07
+  1640  00036A             ;STACK NEED:		0
+  1641  00036A             ;OUTPUT:		NONE
+  1642  00036A             ;******************************************************************	
+  1643  00036A             wait10ms:	
+  1644  00036A   2D12(1)  	mov	a,#18		;;2M
+  1645  00036B             wait20:
+  1646  00036B   2F09(1)  	b0mov	wk09,a
+  1647  00036C   2B08(1)  	clr	wk08
+  1648  00036D             wait21:
+  1649  00036D             wait30:		
+  1650  00036D   2608(1+S)  	decms	wk08		;1	;(4*256+1+1+2+1)*18+1+1=1028*18+2=10.051ms
+  1651  00036E   836D(2)  	jmp	wait30		;2	
+  1652  00036F             wait40:
+  1653  00036F   2609(1+S)   	decms	wk09
+  1654  000370   836D(2)  	jmp	wait21
+  1655  000371   0E00(2)  	ret
+  1656  000372             ;******************************************************************
+  1657  000372             ;NAME:			rolling_code_sum
+  1658  000372             ;INPUT:			
+  1659  000372             ;FUNCTION:		
+  1660  000372             ;DESCRIBE:		NONE
+  1661  000372             ;CALL SUBPROGRAM:	NONE
+  1662  000372             ;USING RESOURCE:	
+  1663  000372             ;STACK NEED:		0
+  1664  000372             ;OUTPUT:		a
+  1665  000372             ;******************************************************************
+  1666  000372             enable_red_led:
+  1667  000372   68D2(1)  	b0bset	green_led
+  1668  000373   8377(2)  	jmp	enable_yellow_led10
+  1669  000374             ;******************************************************************		
+  1670  000374             enable_grn_led:	
+  1671  000374   60D2(1)  	b0bclr	green_led
+  1672  000375   837A(2)  	jmp	b0bclr_led10
+  1673  000376             ;******************************************************************
+  1674  000376             enable_yellow_led:
+  1675  000376   60D2(1)  	b0bclr	green_led		;;黄灯
+  1676  000377             enable_yellow_led10:
+  1677  000377   61D2(1)  	b0bclr	red_led
+  1678  000378   837B(2)  	jmp	b0bclr_led20		
+  1679  000379             ;******************************************************************https://mini.eastday.com/a/n190313073950217.html?qid=03123
+  1680  000379             b0bclr_led:
+  1681  000379   68D2(1)  	b0bset	green_led
+  1682  00037A             b0bclr_led10:
+  1683  00037A   69D2(1)  	b0bset	red_led
+  1684  00037B             b0bclr_led20:
+  1685  00037B   0E00(2)  	ret
+  1686  00037C             ;********************************************************************************
+  1687  00037C             
+  1688  00037C             
+  1689  00037C             
+  1690  00037C             
+  1691  00037C             
+  1692  00037C             
+  1693  00037C             
+  1694  00037C             	include		read_key.asm
+  1695  00037C             ;*********************************************************************************
+  1696  00037C             ;NAME:			READ_KEY10
+  1697  00037C             ;INPUT:			NONE
+  1698  00037C             ;FUNCTION:		??????
+  1699  00037C             ;DESCRIBE:		P00______.-.________
+  1700  00037C             ;			P01______.-.________|
+  1701  00037C             ;			P10______.-.________|
+  1702  00037C             ;			P11______.-.________|
+  1703  00037C             ;			P12______.-.________|
+  1704  00037C             ;			P13______.-.________|
+  1705  00037C             ;			P14______.-.________|
+  1706  00037C             ;					    |
+  1707  00037C             ;					  -----
+  1708  00037C             ;					   ---
+  1709  00037C             ;					    -
+  1710  00037C             ;CALL SUBPROGRAM:	NONE
+  1711  00037C             ;USING RESOURCE:	A
+  1712  00037C             ;STACK NEED:		2
+  1713  00037C             ;OUTPUT:		
+  1714  00037C             ;*********************************************************************************
+  1715  00037C             read_key:			; scan key loop
+  1716  00037C             ;*******************************************************************************
+  1717  00037C             keyin10:	
+  1718  00037C             ;       clr     keyinbuf
+  1719  00037C             keyin20:      	
+  1720  00037C   2D07(1)  	MOV	A,#00000111B
+  1721  00037D   28D0(1)  	AND	A,P0
+  1722  00037E   1D07(1)  	XOR	A,#00000111B
+  1723  00037F   2F55(1)  	B0MOV	keyinbuf,A	
+  1724  000380             keyin90:
+  1725  000380             ;*******************************************************************************
+  1726  000380             ;       CHECK KEYINBUF AND KEYCHKBUF    
+  1727  000380             ;*******************************************************************************
+  1728  000380             keychk10: 
+  1729  000380   2E55(1)         	b0mov	a,keyinbuf
+  1730  000381                    	cjne	a,keychkbuf,keychk20    ;A=KEYCHKBUF则顺序进行，否则跳到KEYCHK20
+  1731  000381   0756(1+S)  		cmprs	a, keychkbuf
+  1732  000382   838C(2)  		jmp	keychk20
+  1733  000383             					
+  1734  000383   7878(1+S)  	b0bts1  f_key_state		; same
+  1735  000384   8391(2)         	jmp     keychk90            	; end
+  1736  000385             ; wait chatter
+  1737  000385   2E57(1)         	b0mov   a,keychat
+  1738  000386                    	jnz     keychk90        
+  1739  000386   7886(1+S)  	b0bts1	FZ
+  1740  000387   8391(2)  		jmp	keychk90
+  1741  000388             ; key bounce time = 0 , copy chk buf into cvt buf
+  1742  000388             ;
+  1743  000388   2E56(1)  	b0mov   a,keychkbuf
+  1744  000389   2F58(1)  	b0mov   keycvtbuf,a
+  1745  00038A             
+  1746  00038A   6078(1)         	b0bclr  f_key_state        ; clr keystat
+  1747  00038B   8391(2)         	jmp     keychk90
+  1748  00038C                    	                        
+  1749  00038C             keychk20:
+  1750  00038C   2E55(1)  	b0mov   a,keyinbuf
+  1751  00038D   2F56(1)  	b0mov   keychkbuf,a
+  1752  00038E   6878(1)         	b0bset  f_key_state        ;set f_key_state,
+  1753  00038F   2D08(1)         	mov     a,#key_age_val
+  1754  000390   2F57(1)         	b0mov   keychat,a       
+  1755  000391             keychk90:
+  1756  000391                    	;ret
+  1757  000391             ;*******************************************************************************
+  1758  000391             ;       compare keycvt and keyold and find the different.
+  1759  000391             ;*******************************************************************************
+  1760  000391             keycvt:
+  1761  000391   2E58(1)  	b0mov	a,keycvtbuf
+  1762  000392             	cje	a,keyoldbuf,keycvt30
+  1763  000392   0759(1+S)  		cmprs	a, keyoldbuf
+  1764  000393   8395(2)  	jmp	$+2
+  1765  000394   83B5(2)  		jmp	keycvt30
+  1766  000395             ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;	
+  1767  000395             keycvt10:
+  1768  000395   2B19(1)  	clr	wk25	                                             
+  1769  000396   2E58(1)  	b0mov	a,keycvtbuf		;新的KEYIN状态                     
+  1770  000397   2F02(1)  	b0mov	wk02,a                                           
+  1771  000398   1B59(1)  	xor	a,keyoldbuf		;旧的KEYIN状态                       
+  1772  000399   2F03(1)  	b0mov	wk03,a			;XOR后可得出有变化的PIN,1-表示有变化 
+  1773  00039A             keycvt11:	                                               
+  1774  00039A   3203(1)  	b0mov	r,#KEYCODENO		;;define how many keys			     
+  1775  00039B             keycvt21:                                                
+  1776  00039B   1E82(1)  	mov	a,r                                                
+  1777  00039C             	jz	keycvt80                                           
+  1778  00039C   7086(1+S)  	b0bts0	FZ
+  1779  00039D   83D2(2)  		jmp	keycvt80
+  1780  00039E   0903(1)  	rrcm	wk03			;找出有变化的pin                       
+  1781  00039F   7286(1+S)  	b0bts0	fc                                             
+  1782  0003A0   83A6(2)  	jmp	keycvt22		;1-表示有变化	                         
+  1783  0003A1   2D03(1)  	mov	a,#03h                                             
+  1784  0003A2   1319(1)  	add	wk25,a                                             
+  1785  0003A3   2682(1+S)  	decms	r                                                
+  1786  0003A4   0902(1)  	rrcm	wk02                                             
+  1787  0003A5   839B(2)  	jmp	keycvt21                                           
+  1788  0003A6             keycvt22:                                                
+  1789  0003A6   0902(1)  	rrcm	wk02                                             
+  1790  0003A7   7286(1+S)  	b0bts0	fc			;"1"表示是按KEY "0"表示放KEY           
+  1791  0003A8   83C8(2)  	jmp	keycvt70     
+  1792  0003A9             
+  1793  0003A9   2E55(1)  	b0mov	a,keyinbuf
+  1794  0003AA             	jnz	keycvt230                                      
+  1795  0003AA   7886(1+S)  	b0bts1	FZ
+  1796  0003AB   83AF(2)  		jmp	keycvt230
+  1797  0003AC             	                                                                                      
+  1798  0003AC   7879(1+S)  	b0bts1	f_longkey_state		;;                           
+  1799  0003AD   83B3(2)  	jmp	keycvt23  
+  1800  0003AE   83DD(2)  	jmp	clr_key_init	
+  1801  0003AF             //	jmp	keycvt90
+  1802  0003AF             keycvt230:     
+  1803  0003AF   2E54(1)  	b0mov	a,sys_mode
+  1804  0003B0             	jnz	keycvt23	                                    	
+  1805  0003B0   7886(1+S)  	b0bts1	FZ
+  1806  0003B1   83B3(2)  		jmp	keycvt23
+  1807  0003B2   83D2(2)  	jmp	keycvt80
+  1808  0003B3             keycvt23:
+  1809  0003B3   1619(1+S)  	incms	wk25			;  
+  1810  0003B4   83CA(2)  	jmp	keycvt71       
+  1811  0003B5             ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+  1812  0003B5             keycvt30:				;长按处理
+  1813  0003B5   2E5E(1)  	b0mov	a,long_key_l
+  1814  0003B6   185D(1)  	or	a,long_key_h
+  1815  0003B7             	jnz	keycvt90
+  1816  0003B7   7886(1+S)  	b0bts1	FZ
+  1817  0003B8   83DC(2)  		jmp	keycvt90
+  1818  0003B9             
+  1819  0003B9   1E59(1)  	mov	a,keyoldbuf
+  1820  0003BA             	jz	keycvt90
+  1821  0003BA   7086(1+S)  	b0bts0	FZ
+  1822  0003BB   83DC(2)  		jmp	keycvt90
+  1823  0003BC             
+  1824  0003BC   7279(1+S)  	b0bts0	f_long_down		;1-长按一直按下，0长按弹起  
+  1825  0003BD   83DC(2)  	jmp	keycvt90      
+  1826  0003BE             
+  1827  0003BE   2E58(1)  	b0mov	a,keycvtbuf
+  1828  0003BF             	cje	a,#01h,keycvt31
+  1829  0003BF   0601(1+S)  		cmprs	a, #01h
+  1830  0003C0   83C2(2)  	jmp	$+2
+  1831  0003C1   83C4(2)  		jmp	keycvt31
+  1832  0003C2   6A79(1)  	b0bset	f_long_down		;1-长按一直按下，0长按弹起   
+  1833  0003C3   6879(1)  	b0bset	f_longkey_state
+  1834  0003C4             keycvt31:
+  1835  0003C4             ;	b0bset	f_longkey_state
+  1836  0003C4   2E5B(1)  	b0mov	a,long_key_back
+  1837  0003C5   1402(1)  	add	a,#02          
+  1838  0003C6   2F19(1)  	b0mov	wk25,a       
+  1839  0003C7   83CA(2)  	jmp	keycvt71       
+  1840  0003C8             keycvt70:                                        
+  1841  0003C8             	B0MOV_	long_key_back,wk25	;备份按下时候的值  
+  1842  0003C8   2E19(1)  	b0mov	a, wk25
+  1843  0003C9   2F5B(1)  	b0mov	long_key_back, a
+  1844  0003CA             keycvt71:                                          
+  1845  0003CA   3400(1)  	b0mov	y,#norml_key_table$m
+  1846  0003CB   336D(1)  	b0mov	z,#norml_key_table$l
+  1847  0003CC   2E19(1)  	b0mov	a,wk25
+  1848  0003CD   1383(1)  	add	z,a
+  1849  0003CE   2D00(1)  	mov	a,#00
+  1850  0003CF   1184(1)  	adc	y,a
+  1851  0003D0   0D00(2)  	movc                                     
+  1852  0003D1             keycvt72:		                                     
+  1853  0003D1   2F5A(1)  	b0mov	key_command,a                            
+  1854  0003D2             keycvt80:	
+  1855  0003D2   2E58(1)  	b0mov   a,keycvtbuf
+  1856  0003D3   2F59(1)  	b0mov   keyoldbuf,a
+  1857  0003D4             keycvt81:
+  1858  0003D4   2D64(1)  	mov	a,#100
+  1859  0003D5   7079(1+S)  	b0bts0	f_longkey_state
+  1860  0003D6   2D19(1)  	mov	a,#25
+  1861  0003D7   2F5E(1)  	b0mov	long_key_l,a
+  1862  0003D8             	
+  1863  0003D8   2D03(1)  	mov	a,#03
+  1864  0003D9   7079(1+S)  	b0bts0	f_longkey_state
+  1865  0003DA   2D01(1)  	mov	a,#01
+  1866  0003DB   2F5D(1)  	b0mov	long_key_h,a
+  1867  0003DC             keycvt90:	
+  1868  0003DC   0E00(2)  	ret
+  1869  0003DD             ;*******************************************************************************
+  1870  0003DD             clr_key_init:
+  1871  0003DD   6279(1)  	b0bclr	f_long_down    
+  1872  0003DE   6079(1)  	b0bclr	f_longkey_state 
+  1873  0003DF   2B5B(1)  	clr	long_key_back
+  1874  0003E0   2B56(1)  	clr	keychkbuf	
+  1875  0003E1   2B58(1)  	clr	keycvtbuf	
+  1876  0003E2   2B59(1)  	clr	keyoldbuf
+  1877  0003E3   0E00(2)  	ret
+  1878  0003E4             	
+  1879  0003E4             
+  1880  0003E4                 	
+  1881  0003E4             	;include		buzzer.asm
+  1882  0003E4             	include		display.asm
+  1883  0003E4             ;************************************************************
+  1884  0003E4             ;NAME:			display_app10
+  1885  0003E4             ;INPUT:			F_UPDATE_DISPLAY,DISPLAY_MODE_BUF
+  1886  0003E4             ;FUNCTION:		LCD显示
+  1887  0003E4             ;DESCRIBE:		NONE
+  1888  0003E4             ;CALL SUBPROGRAM:	NONE
+  1889  0003E4             ;USING RESOURCE:	
+  1890  0003E4             ;STACK NEED:		
+  1891  0003E4             ;OUTPUT:		
+  1892  0003E4             ;***********************************************************
+  1893  0003E4             display_app:
+  1894  0003E4   7978(1+S)  	b0bts1	f_update_disp         ;标志位
+  1895  0003E5   840D(2)  	JMP	display_data90        ;标志位为0退出
+  1896  0003E6   6178(1)  	b0bclr	f_update_disp         ;标志位为1，先清除标志位，再执行显示
+  1897  0003E7             lcd_app_i:
+  1898  0003E7   C404(2)  	call	display_data	
+  1899  0003E8             ;***********************************************************	
+  1900  0003E8             display_app000:
+  1901  0003E8   2E6F(1)  	b0mov	a,dis_mode_buf
+  1902  0003E9             	@jmp_a	2          ;跳表列表的数量为2个
+  1903  0003E9   03CE(1)  	b0add PCl ,a
+  1904  0003EA   83EC(2)  	jmp	display_app100			;;00:00:待测模式
+  1905  0003EB   83FE(2)  	jmp	display_app120			;;02:测试完成数据显示	
+  1906  0003EC             ;;-----------------------------------------------
+  1907  0003EC             display_app100:	
+  1908  0003EC   7678(1+S)  	b0bts0	f_dis_app			;;0-全部显示，1-显示字符
+  1909  0003ED   83F0(2)  	jmp	display_app101
+  1910  0003EE             ;;***********************************************
+  1911  0003EE   2D08(1)  	mov	a,#08H          ;此处控制显示的值 对应lcd_table里面的位置
+  1912  0003EF   C407(2)  	call	display_data10
+  1913  0003F0             display_app101:
+  1914  0003F0   2DFF(1)  	mov	a,#0ffh
+  1915  0003F1   2F76(1)  	b0mov	lcd_dot1,a
+  1916  0003F2   7850(1+S)          b0bts1  key_off1         ;0全亮  1全灭
+  1917  0003F3   83FB(2)  	jmp     display_app101_2
+  1918  0003F4   83F6(2)          jmp     display_app101_1
+  1919  0003F5   2DFF(1)  	mov	a,#0ffh
+  1920  0003F6             display_app101_1:               ;全灭
+  1921  0003F6   2D00(1)  	mov	a,#000h
+  1922  0003F7   2F76(1)  	b0mov	lcd_dot1,a
+  1923  0003F8   2DF0(1)          mov	a,#0f0h
+  1924  0003F9   2F77(1)  	b0mov	lcd_dot2,a			
+  1925  0003FA   8402(2)  	jmp	display_app80
+  1926  0003FB             display_app101_2:              ;全亮
+  1927  0003FB   2DFF(1)          mov	a,#0ffh
+  1928  0003FC   2F77(1)  	b0mov	lcd_dot2,a			
+  1929  0003FD   8402(2)  	jmp	display_app80
+  1930  0003FE             ;;-----------------------------------------------
+  1931  0003FE             display_app120:	
+  1932  0003FE   7278(1+S)  	b0bts0	f_dis_mode			;;0-显示数字，1-显示点
+  1933  0003FF   83F0(2)  	jmp	display_app101
+  1934  000400             	
+  1935  000400   2E68(1)  	b0mov	a,num
+  1936  000401   C407(2)  	call	display_data10
+  1937  000402             ;;-----------------------------------------------				
+  1938  000402             display_app80:	
+  1939  000402   C7E0(2)  	call	lcd_display	
+  1940  000403             display_app90:
+  1941  000403   0E00(2)  	ret		
+  1942  000404             ;;**********************************************************
+  1943  000404             display_data:
+  1944  000404   2B76(1)  	clr	lcd_dot1   ;
+  1945  000405   2B77(1)  	clr	lcd_dot2   ;屏幕app界面显示
+  1946  000406   2D16(1)  	mov	a,#LCD_OFF
+  1947  000407             display_data10:
+  1948  000407   2F72(1)  	b0mov	dis_data_buf+2,a ;将a的值存到数组dis_data_buf的第3个字节上dis_data_buf[2]
+  1949  000408   2F73(1)  	b0mov	dis_data_buf+3,a
+  1950  000409             display_data30:	
+  1951  000409   2F70(1)  	b0mov	dis_data_buf+0,a
+  1952  00040A   2F71(1)  	b0mov	dis_data_buf+1,a
+  1953  00040B   2F74(1)  	b0mov	dis_data_buf+4,a
+  1954  00040C   2F75(1)  	b0mov	dis_data_buf+5,a	
+  1955  00040D             display_data90:
+  1956  00040D   0E00(2)  	ret
+  1957  00040E             ;;********************************************************
+  1958  00040E   FFFF(2)  dw	0ffffh
+  1959  00040F   FFFF(2)  dw	0ffffh
+  1960  000410   FFFF(2)  dw	0ffffh
+  1961  000411   FFFF(2)  dw	0ffffh
+  1962  000412   FFFF(2)  dw	0ffffh
+  1963  000413   FFFF(2)  dw	0ffffh
+  1964  000414   FFFF(2)  dw	0ffffh
+  1965  000415   FFFF(2)  dw	0ffffh
+  1966  000416   FFFF(2)  dw	0ffffh
+  1967  000417   FFFF(2)  dw	0ffffh
+  1968  000418   FFFF(2)  dw	0ffffh
+  1969  000419   FFFF(2)  dw	0ffffh
+  1970  00041A   FFFF(2)  dw	0ffffh
+  1971  00041B   FFFF(2)  dw	0ffffh
+  1972  00041C   FFFF(2)  dw	0ffffh
+  1973  00041D   FFFF(2)  dw	0ffffh
+  1974  00041E   FFFF(2)  dw	0ffffh
+  1975  00041F   FFFF(2)  dw	0ffffh
+  1976  000420   FFFF(2)  dw	0ffffh
+  1977  000421   FFFF(2)  dw	0ffffh
+  1978  000422   FFFF(2)  dw	0ffffh
+  1979  000423   FFFF(2)  dw	0ffffh
+  1980  000424   FFFF(2)  dw	0ffffh
+  1981  000425   FFFF(2)  dw	0ffffh
+  1982  000426   FFFF(2)  dw	0ffffh
+  1983  000427   FFFF(2)  dw	0ffffh
+  1984  000428   FFFF(2)  dw	0ffffh
+  1985  000429   FFFF(2)  dw	0ffffh
+  1986  00042A   FFFF(2)  dw	0ffffh
+  1987  00042B   FFFF(2)  dw	0ffffh
+  1988  00042C   FFFF(2)  dw	0ffffh
+  1989  00042D   FFFF(2)  dw	0ffffh
+  1990  00042E   FFFF(2)  dw	0ffffh
+  1991  00042F   FFFF(2)  dw	0ffffh
+  1992  000430   FFFF(2)  dw	0ffffh
+  1993  000431   FFFF(2)  dw	0ffffh
+  1994  000432   FFFF(2)  dw	0ffffh
+  1995  000433   FFFF(2)  dw	0ffffh
+  1996  000434   FFFF(2)  dw	0ffffh
+  1997  000435   FFFF(2)  dw	0ffffh
+  1998  000436   FFFF(2)  dw	0ffffh
+  1999  000437   FFFF(2)  dw	0ffffh
+  2000  000438   FFFF(2)  dw	0ffffh
+  2001  000439   FFFF(2)  dw	0ffffh
+  2002  00043A   FFFF(2)  dw	0ffffh
+  2003  00043B   FFFF(2)  dw	0ffffh
+  2004  00043C   FFFF(2)  dw	0ffffh
+  2005  00043D   FFFF(2)  dw	0ffffh
+  2006  00043E   FFFF(2)  dw	0ffffh
+  2007  00043F   FFFF(2)  dw	0ffffh
+  2008  000440   FFFF(2)  dw	0ffffh
+  2009  000441   FFFF(2)  dw	0ffffh
+  2010  000442   FFFF(2)  dw	0ffffh
+  2011  000443   FFFF(2)  dw	0ffffh
+  2012  000444   FFFF(2)  dw	0ffffh
+  2013  000445   FFFF(2)  dw	0ffffh
+  2014  000446   FFFF(2)  dw	0ffffh
+  2015  000447   FFFF(2)  dw	0ffffh
+  2016  000448   FFFF(2)  dw	0ffffh
+  2017  000449   FFFF(2)  dw	0ffffh
+  2018  00044A   FFFF(2)  dw	0ffffh
+  2019  00044B   FFFF(2)  dw	0ffffh
+  2020  00044C   FFFF(2)  dw	0ffffh
+  2021  00044D   FFFF(2)  dw	0ffffh
+  2022  00044E   FFFF(2)  dw	0ffffh
+  2023  00044F   FFFF(2)  dw	0ffffh
+  2024  000450   FFFF(2)  dw	0ffffh
+  2025  000451   FFFF(2)  dw	0ffffh
+  2026  000452   FFFF(2)  dw	0ffffh
+  2027  000453   FFFF(2)  dw	0ffffh
+  2028  000454   FFFF(2)  dw	0ffffh
+  2029  000455   FFFF(2)  dw	0ffffh
+  2030  000456   FFFF(2)  dw	0ffffh
+  2031  000457   FFFF(2)  dw	0ffffh
+  2032  000458   FFFF(2)  dw	0ffffh
+  2033  000459   FFFF(2)  dw	0ffffh
+  2034  00045A   FFFF(2)  dw	0ffffh
+  2035  00045B   FFFF(2)  dw	0ffffh
+  2036  00045C   FFFF(2)  dw	0ffffh
+  2037  00045D   FFFF(2)  dw	0ffffh
+  2038  00045E   FFFF(2)  dw	0ffffh
+  2039  00045F   FFFF(2)  dw	0ffffh
+  2040  000460   FFFF(2)  dw	0ffffh
+  2041  000461   FFFF(2)  dw	0ffffh
+  2042  000462   FFFF(2)  dw	0ffffh
+  2043  000463   FFFF(2)  dw	0ffffh
+  2044  000464   FFFF(2)  dw	0ffffh
+  2045  000465   FFFF(2)  dw	0ffffh
+  2046  000466   FFFF(2)  dw	0ffffh
+  2047  000467   FFFF(2)  dw	0ffffh
+  2048  000468   FFFF(2)  dw	0ffffh
+  2049  000469   FFFF(2)  dw	0ffffh
+  2050  00046A   FFFF(2)  dw	0ffffh
+  2051  00046B   FFFF(2)  dw	0ffffh
+  2052  00046C   FFFF(2)  dw	0ffffh
+  2053  00046D   FFFF(2)  dw	0ffffh
+  2054  00046E   FFFF(2)  dw	0ffffh
+  2055  00046F   FFFF(2)  dw	0ffffh
+  2056  000470   FFFF(2)  dw	0ffffh
+  2057  000471   FFFF(2)  dw	0ffffh
+  2058  000472   FFFF(2)  dw	0ffffh
+  2059  000473   FFFF(2)  dw	0ffffh
+  2060  000474   FFFF(2)  dw	0ffffh
+  2061  000475   FFFF(2)  dw	0ffffh
+  2062  000476   FFFF(2)  dw	0ffffh
+  2063  000477   FFFF(2)  dw	0ffffh
+  2064  000478   FFFF(2)  dw	0ffffh
+  2065  000479   FFFF(2)  dw	0ffffh
+  2066  00047A   FFFF(2)  dw	0ffffh
+  2067  00047B   FFFF(2)  dw	0ffffh
+  2068  00047C   FFFF(2)  dw	0ffffh
+  2069  00047D   FFFF(2)  dw	0ffffh
+  2070  00047E   FFFF(2)  dw	0ffffh
+  2071  00047F   FFFF(2)  dw	0ffffh
+  2072  000480   FFFF(2)  dw	0ffffh
+  2073  000481   FFFF(2)  dw	0ffffh
+  2074  000482   FFFF(2)  dw	0ffffh
+  2075  000483   FFFF(2)  dw	0ffffh
+  2076  000484   FFFF(2)  dw	0ffffh
+  2077  000485   FFFF(2)  dw	0ffffh
+  2078  000486   FFFF(2)  dw	0ffffh
+  2079  000487   FFFF(2)  dw	0ffffh
+  2080  000488   FFFF(2)  dw	0ffffh
+  2081  000489   FFFF(2)  dw	0ffffh
+  2082  00048A   FFFF(2)  dw	0ffffh
+  2083  00048B   FFFF(2)  dw	0ffffh
+  2084  00048C   FFFF(2)  dw	0ffffh
+  2085  00048D   FFFF(2)  dw	0ffffh
+  2086  00048E   FFFF(2)  dw	0ffffh
+  2087  00048F   FFFF(2)  dw	0ffffh
+  2088  000490   FFFF(2)  dw	0ffffh
+  2089  000491   FFFF(2)  dw	0ffffh
+  2090  000492   FFFF(2)  dw	0ffffh
+  2091  000493   FFFF(2)  dw	0ffffh
+  2092  000494   FFFF(2)  dw	0ffffh
+  2093  000495   FFFF(2)  dw	0ffffh
+  2094  000496   FFFF(2)  dw	0ffffh
+  2095  000497   FFFF(2)  dw	0ffffh
+  2096  000498   FFFF(2)  dw	0ffffh
+  2097  000499   FFFF(2)  dw	0ffffh
+  2098  00049A   FFFF(2)  dw	0ffffh
+  2099  00049B   FFFF(2)  dw	0ffffh
+  2100  00049C   FFFF(2)  dw	0ffffh
+  2101  00049D   FFFF(2)  dw	0ffffh
+  2102  00049E   FFFF(2)  dw	0ffffh
+  2103  00049F   FFFF(2)  dw	0ffffh
+  2104  0004A0   FFFF(2)  dw	0ffffh
+  2105  0004A1   FFFF(2)  dw	0ffffh
+  2106  0004A2   FFFF(2)  dw	0ffffh
+  2107  0004A3   FFFF(2)  dw	0ffffh
+  2108  0004A4   FFFF(2)  dw	0ffffh
+  2109  0004A5   FFFF(2)  dw	0ffffh
+  2110  0004A6   FFFF(2)  dw	0ffffh
+  2111  0004A7   FFFF(2)  dw	0ffffh
+  2112  0004A8   FFFF(2)  dw	0ffffh
+  2113  0004A9   FFFF(2)  dw	0ffffh
+  2114  0004AA   FFFF(2)  dw	0ffffh
+  2115  0004AB   FFFF(2)  dw	0ffffh
+  2116  0004AC   FFFF(2)  dw	0ffffh
+  2117  0004AD   FFFF(2)  dw	0ffffh
+  2118  0004AE   FFFF(2)  dw	0ffffh
+  2119  0004AF   FFFF(2)  dw	0ffffh
+  2120  0004B0   FFFF(2)  dw	0ffffh
+  2121  0004B1   FFFF(2)  dw	0ffffh
+  2122  0004B2   FFFF(2)  dw	0ffffh
+  2123  0004B3   FFFF(2)  dw	0ffffh
+  2124  0004B4   FFFF(2)  dw	0ffffh
+  2125  0004B5   FFFF(2)  dw	0ffffh
+  2126  0004B6   FFFF(2)  dw	0ffffh
+  2127  0004B7   FFFF(2)  dw	0ffffh
+  2128  0004B8   FFFF(2)  dw	0ffffh
+  2129  0004B9   FFFF(2)  dw	0ffffh
+  2130  0004BA   FFFF(2)  dw	0ffffh
+  2131  0004BB   FFFF(2)  dw	0ffffh
+  2132  0004BC   FFFF(2)  dw	0ffffh
+  2133  0004BD   FFFF(2)  dw	0ffffh
+  2134  0004BE   FFFF(2)  dw	0ffffh
+  2135  0004BF   FFFF(2)  dw	0ffffh
+  2136  0004C0   FFFF(2)  dw	0ffffh
+  2137  0004C1   FFFF(2)  dw	0ffffh
+  2138  0004C2   FFFF(2)  dw	0ffffh
+  2139  0004C3   FFFF(2)  dw	0ffffh
+  2140  0004C4   FFFF(2)  dw	0ffffh
+  2141  0004C5   FFFF(2)  dw	0ffffh
+  2142  0004C6   FFFF(2)  dw	0ffffh
+  2143  0004C7   FFFF(2)  dw	0ffffh
+  2144  0004C8   FFFF(2)  dw	0ffffh
+  2145  0004C9   FFFF(2)  dw	0ffffh
+  2146  0004CA   FFFF(2)  dw	0ffffh
+  2147  0004CB   FFFF(2)  dw	0ffffh
+  2148  0004CC   FFFF(2)  dw	0ffffh
+  2149  0004CD   FFFF(2)  dw	0ffffh
+  2150  0004CE   FFFF(2)  dw	0ffffh
+  2151  0004CF   FFFF(2)  dw	0ffffh
+  2152  0004D0   FFFF(2)  dw	0ffffh
+  2153  0004D1   FFFF(2)  dw	0ffffh
+  2154  0004D2   FFFF(2)  dw	0ffffh
+  2155  0004D3   FFFF(2)  dw	0ffffh
+  2156  0004D4   FFFF(2)  dw	0ffffh
+  2157  0004D5   FFFF(2)  dw	0ffffh
+  2158  0004D6   FFFF(2)  dw	0ffffh
+  2159  0004D7   FFFF(2)  dw	0ffffh
+  2160  0004D8   FFFF(2)  dw	0ffffh
+  2161  0004D9   FFFF(2)  dw	0ffffh
+  2162  0004DA   FFFF(2)  dw	0ffffh
+  2163  0004DB   FFFF(2)  dw	0ffffh
+  2164  0004DC   FFFF(2)  dw	0ffffh
+  2165  0004DD   FFFF(2)  dw	0ffffh
+  2166  0004DE   FFFF(2)  dw	0ffffh
+  2167  0004DF   FFFF(2)  dw	0ffffh
+  2168  0004E0   FFFF(2)  dw	0ffffh
+  2169  0004E1   FFFF(2)  dw	0ffffh
+  2170  0004E2   FFFF(2)  dw	0ffffh
+  2171  0004E3   FFFF(2)  dw	0ffffh
+  2172  0004E4   FFFF(2)  dw	0ffffh
+  2173  0004E5   FFFF(2)  dw	0ffffh
+  2174  0004E6   FFFF(2)  dw	0ffffh
+  2175  0004E7   FFFF(2)  dw	0ffffh
+  2176  0004E8   FFFF(2)  dw	0ffffh
+  2177  0004E9   FFFF(2)  dw	0ffffh
+  2178  0004EA   FFFF(2)  dw	0ffffh
+  2179  0004EB   FFFF(2)  dw	0ffffh
+  2180  0004EC   FFFF(2)  dw	0ffffh
+  2181  0004ED   FFFF(2)  dw	0ffffh
+  2182  0004EE   FFFF(2)  dw	0ffffh
+  2183  0004EF   FFFF(2)  dw	0ffffh
+  2184  0004F0   FFFF(2)  dw	0ffffh
+  2185  0004F1   FFFF(2)  dw	0ffffh
+  2186  0004F2   FFFF(2)  dw	0ffffh
+  2187  0004F3   FFFF(2)  dw	0ffffh
+  2188  0004F4   FFFF(2)  dw	0ffffh
+  2189  0004F5   FFFF(2)  dw	0ffffh
+  2190  0004F6   FFFF(2)  dw	0ffffh
+  2191  0004F7   FFFF(2)  dw	0ffffh
+  2192  0004F8   FFFF(2)  dw	0ffffh
+  2193  0004F9   FFFF(2)  dw	0ffffh
+  2194  0004FA   FFFF(2)  dw	0ffffh
+  2195  0004FB   FFFF(2)  dw	0ffffh
+  2196  0004FC   FFFF(2)  dw	0ffffh
+  2197  0004FD   FFFF(2)  dw	0ffffh
+  2198  0004FE   FFFF(2)  dw	0ffffh
+  2199  0004FF   FFFF(2)  dw	0ffffh
+  2200  000500   FFFF(2)  dw	0ffffh
+  2201  000501   FFFF(2)  dw	0ffffh
+  2202  000502   FFFF(2)  dw	0ffffh
+  2203  000503   FFFF(2)  dw	0ffffh
+  2204  000504   FFFF(2)  dw	0ffffh
+  2205  000505   FFFF(2)  dw	0ffffh
+  2206  000506   FFFF(2)  dw	0ffffh
+  2207  000507   FFFF(2)  dw	0ffffh
+  2208  000508   FFFF(2)  dw	0ffffh
+  2209  000509   FFFF(2)  dw	0ffffh
+  2210  00050A   FFFF(2)  dw	0ffffh
+  2211  00050B   FFFF(2)  dw	0ffffh
+  2212  00050C   FFFF(2)  dw	0ffffh
+  2213  00050D   FFFF(2)  dw	0ffffh
+  2214  00050E   FFFF(2)  dw	0ffffh
+  2215  00050F   FFFF(2)  dw	0ffffh
+  2216  000510   FFFF(2)  dw	0ffffh
+  2217  000511   FFFF(2)  dw	0ffffh
+  2218  000512   FFFF(2)  dw	0ffffh
+  2219  000513   FFFF(2)  dw	0ffffh
+  2220  000514   FFFF(2)  dw	0ffffh
+  2221  000515   FFFF(2)  dw	0ffffh
+  2222  000516   FFFF(2)  dw	0ffffh
+  2223  000517   FFFF(2)  dw	0ffffh
+  2224  000518   FFFF(2)  dw	0ffffh
+  2225  000519   FFFF(2)  dw	0ffffh
+  2226  00051A   FFFF(2)  dw	0ffffh
+  2227  00051B   FFFF(2)  dw	0ffffh
+  2228  00051C   FFFF(2)  dw	0ffffh
+  2229  00051D   FFFF(2)  dw	0ffffh
+  2230  00051E   FFFF(2)  dw	0ffffh
+  2231  00051F   FFFF(2)  dw	0ffffh
+  2232  000520   FFFF(2)  dw	0ffffh
+  2233  000521   FFFF(2)  dw	0ffffh
+  2234  000522   FFFF(2)  dw	0ffffh
+  2235  000523   FFFF(2)  dw	0ffffh
+  2236  000524   FFFF(2)  dw	0ffffh
+  2237  000525   FFFF(2)  dw	0ffffh
+  2238  000526   FFFF(2)  dw	0ffffh
+  2239  000527   FFFF(2)  dw	0ffffh
+  2240  000528   FFFF(2)  dw	0ffffh
+  2241  000529   FFFF(2)  dw	0ffffh
+  2242  00052A   FFFF(2)  dw	0ffffh
+  2243  00052B   FFFF(2)  dw	0ffffh
+  2244  00052C   FFFF(2)  dw	0ffffh
+  2245  00052D   FFFF(2)  dw	0ffffh
+  2246  00052E   FFFF(2)  dw	0ffffh
+  2247  00052F   FFFF(2)  dw	0ffffh
+  2248  000530   FFFF(2)  dw	0ffffh
+  2249  000531   FFFF(2)  dw	0ffffh
+  2250  000532   FFFF(2)  dw	0ffffh
+  2251  000533   FFFF(2)  dw	0ffffh
+  2252  000534   FFFF(2)  dw	0ffffh
+  2253  000535   FFFF(2)  dw	0ffffh
+  2254  000536   FFFF(2)  dw	0ffffh
+  2255  000537   FFFF(2)  dw	0ffffh
+  2256  000538   FFFF(2)  dw	0ffffh
+  2257  000539   FFFF(2)  dw	0ffffh
+  2258  00053A   FFFF(2)  dw	0ffffh
+  2259  00053B   FFFF(2)  dw	0ffffh
+  2260  00053C   FFFF(2)  dw	0ffffh
+  2261  00053D   FFFF(2)  dw	0ffffh
+  2262  00053E   FFFF(2)  dw	0ffffh
+  2263  00053F   FFFF(2)  dw	0ffffh
+  2264  000540   FFFF(2)  dw	0ffffh
+  2265  000541   FFFF(2)  dw	0ffffh
+  2266  000542   FFFF(2)  dw	0ffffh
+  2267  000543   FFFF(2)  dw	0ffffh
+  2268  000544   FFFF(2)  dw	0ffffh
+  2269  000545   FFFF(2)  dw	0ffffh
+  2270  000546   FFFF(2)  dw	0ffffh
+  2271  000547   FFFF(2)  dw	0ffffh
+  2272  000548   FFFF(2)  dw	0ffffh
+  2273  000549   FFFF(2)  dw	0ffffh
+  2274  00054A   FFFF(2)  dw	0ffffh
+  2275  00054B   FFFF(2)  dw	0ffffh
+  2276  00054C   FFFF(2)  dw	0ffffh
+  2277  00054D   FFFF(2)  dw	0ffffh
+  2278  00054E   FFFF(2)  dw	0ffffh
+  2279  00054F   FFFF(2)  dw	0ffffh
+  2280  000550   FFFF(2)  dw	0ffffh
+  2281  000551   FFFF(2)  dw	0ffffh
+  2282  000552   FFFF(2)  dw	0ffffh
+  2283  000553   FFFF(2)  dw	0ffffh
+  2284  000554   FFFF(2)  dw	0ffffh
+  2285  000555   FFFF(2)  dw	0ffffh
+  2286  000556   FFFF(2)  dw	0ffffh
+  2287  000557   FFFF(2)  dw	0ffffh
+  2288  000558   FFFF(2)  dw	0ffffh
+  2289  000559   FFFF(2)  dw	0ffffh
+  2290  00055A   FFFF(2)  dw	0ffffh
+  2291  00055B   FFFF(2)  dw	0ffffh
+  2292  00055C   FFFF(2)  dw	0ffffh
+  2293  00055D   FFFF(2)  dw	0ffffh
+  2294  00055E   FFFF(2)  dw	0ffffh
+  2295  00055F   FFFF(2)  dw	0ffffh
+  2296  000560   FFFF(2)  dw	0ffffh
+  2297  000561   FFFF(2)  dw	0ffffh
+  2298  000562   FFFF(2)  dw	0ffffh
+  2299  000563   FFFF(2)  dw	0ffffh
+  2300  000564   FFFF(2)  dw	0ffffh
+  2301  000565   FFFF(2)  dw	0ffffh
+  2302  000566   FFFF(2)  dw	0ffffh
+  2303  000567   FFFF(2)  dw	0ffffh
+  2304  000568   FFFF(2)  dw	0ffffh
+  2305  000569   FFFF(2)  dw	0ffffh
+  2306  00056A   FFFF(2)  dw	0ffffh
+  2307  00056B   FFFF(2)  dw	0ffffh
+  2308  00056C   FFFF(2)  dw	0ffffh
+  2309  00056D   FFFF(2)  dw	0ffffh
+  2310  00056E   FFFF(2)  dw	0ffffh
+  2311  00056F   FFFF(2)  dw	0ffffh
+  2312  000570   FFFF(2)  dw	0ffffh
+  2313  000571   FFFF(2)  dw	0ffffh
+  2314  000572   FFFF(2)  dw	0ffffh
+  2315  000573   FFFF(2)  dw	0ffffh
+  2316  000574   FFFF(2)  dw	0ffffh
+  2317  000575   FFFF(2)  dw	0ffffh
+  2318  000576   FFFF(2)  dw	0ffffh
+  2319  000577   FFFF(2)  dw	0ffffh
+  2320  000578   FFFF(2)  dw	0ffffh
+  2321  000579   FFFF(2)  dw	0ffffh
+  2322  00057A   FFFF(2)  dw	0ffffh
+  2323  00057B   FFFF(2)  dw	0ffffh
+  2324  00057C   FFFF(2)  dw	0ffffh
+  2325  00057D   FFFF(2)  dw	0ffffh
+  2326  00057E   FFFF(2)  dw	0ffffh
+  2327  00057F   FFFF(2)  dw	0ffffh
+  2328  000580   FFFF(2)  dw	0ffffh
+  2329  000581   FFFF(2)  dw	0ffffh
+  2330  000582   FFFF(2)  dw	0ffffh
+  2331  000583   FFFF(2)  dw	0ffffh
+  2332  000584   FFFF(2)  dw	0ffffh
+  2333  000585   FFFF(2)  dw	0ffffh
+  2334  000586   FFFF(2)  dw	0ffffh
+  2335  000587   FFFF(2)  dw	0ffffh
+  2336  000588   FFFF(2)  dw	0ffffh
+  2337  000589   FFFF(2)  dw	0ffffh
+  2338  00058A   FFFF(2)  dw	0ffffh
+  2339  00058B   FFFF(2)  dw	0ffffh
+  2340  00058C   FFFF(2)  dw	0ffffh
+  2341  00058D   FFFF(2)  dw	0ffffh
+  2342  00058E   FFFF(2)  dw	0ffffh
+  2343  00058F   FFFF(2)  dw	0ffffh
+  2344  000590   FFFF(2)  dw	0ffffh
+  2345  000591   FFFF(2)  dw	0ffffh
+  2346  000592   FFFF(2)  dw	0ffffh
+  2347  000593   FFFF(2)  dw	0ffffh
+  2348  000594   FFFF(2)  dw	0ffffh
+  2349  000595   FFFF(2)  dw	0ffffh
+  2350  000596   FFFF(2)  dw	0ffffh
+  2351  000597   FFFF(2)  dw	0ffffh
+  2352  000598   FFFF(2)  dw	0ffffh
+  2353  000599   FFFF(2)  dw	0ffffh
+  2354  00059A   FFFF(2)  dw	0ffffh
+  2355  00059B   FFFF(2)  dw	0ffffh
+  2356  00059C   FFFF(2)  dw	0ffffh
+  2357  00059D   FFFF(2)  dw	0ffffh
+  2358  00059E   FFFF(2)  dw	0ffffh
+  2359  00059F   FFFF(2)  dw	0ffffh
+  2360  0005A0   FFFF(2)  dw	0ffffh
+  2361  0005A1   FFFF(2)  dw	0ffffh
+  2362  0005A2   FFFF(2)  dw	0ffffh
+  2363  0005A3   FFFF(2)  dw	0ffffh
+  2364  0005A4   FFFF(2)  dw	0ffffh
+  2365  0005A5   FFFF(2)  dw	0ffffh
+  2366  0005A6   FFFF(2)  dw	0ffffh
+  2367  0005A7   FFFF(2)  dw	0ffffh
+  2368  0005A8   FFFF(2)  dw	0ffffh
+  2369  0005A9   FFFF(2)  dw	0ffffh
+  2370  0005AA   FFFF(2)  dw	0ffffh
+  2371  0005AB   FFFF(2)  dw	0ffffh
+  2372  0005AC   FFFF(2)  dw	0ffffh
+  2373  0005AD   FFFF(2)  dw	0ffffh
+  2374  0005AE   FFFF(2)  dw	0ffffh
+  2375  0005AF   FFFF(2)  dw	0ffffh
+  2376  0005B0   FFFF(2)  dw	0ffffh
+  2377  0005B1   FFFF(2)  dw	0ffffh
+  2378  0005B2   FFFF(2)  dw	0ffffh
+  2379  0005B3   FFFF(2)  dw	0ffffh
+  2380  0005B4   FFFF(2)  dw	0ffffh
+  2381  0005B5   FFFF(2)  dw	0ffffh
+  2382  0005B6   FFFF(2)  dw	0ffffh
+  2383  0005B7   FFFF(2)  dw	0ffffh
+  2384  0005B8   FFFF(2)  dw	0ffffh
+  2385  0005B9   FFFF(2)  dw	0ffffh
+  2386  0005BA   FFFF(2)  dw	0ffffh
+  2387  0005BB   FFFF(2)  dw	0ffffh
+  2388  0005BC   FFFF(2)  dw	0ffffh
+  2389  0005BD   FFFF(2)  dw	0ffffh
+  2390  0005BE   FFFF(2)  dw	0ffffh
+  2391  0005BF   FFFF(2)  dw	0ffffh
+  2392  0005C0   FFFF(2)  dw	0ffffh
+  2393  0005C1   FFFF(2)  dw	0ffffh
+  2394  0005C2   FFFF(2)  dw	0ffffh
+  2395  0005C3   FFFF(2)  dw	0ffffh
+  2396  0005C4   FFFF(2)  dw	0ffffh
+  2397  0005C5   FFFF(2)  dw	0ffffh
+  2398  0005C6   FFFF(2)  dw	0ffffh
+  2399  0005C7   FFFF(2)  dw	0ffffh
+  2400  0005C8   FFFF(2)  dw	0ffffh
+  2401  0005C9   FFFF(2)  dw	0ffffh
+  2402  0005CA   FFFF(2)  dw	0ffffh
+  2403  0005CB   FFFF(2)  dw	0ffffh
+  2404  0005CC   FFFF(2)  dw	0ffffh
+  2405  0005CD   FFFF(2)  dw	0ffffh
+  2406  0005CE   FFFF(2)  dw	0ffffh
+  2407  0005CF   FFFF(2)  dw	0ffffh
+  2408  0005D0   FFFF(2)  dw	0ffffh
+  2409  0005D1   FFFF(2)  dw	0ffffh
+  2410  0005D2   FFFF(2)  dw	0ffffh
+  2411  0005D3   FFFF(2)  dw	0ffffh
+  2412  0005D4   FFFF(2)  dw	0ffffh
+  2413  0005D5   FFFF(2)  dw	0ffffh
+  2414  0005D6   FFFF(2)  dw	0ffffh
+  2415  0005D7   FFFF(2)  dw	0ffffh
+  2416  0005D8             
+  2417  0005D8             
+  2418  0005D8             	
+  2419  0005D8             
+  2420  0005D8             
+  2421  0005D8             
+  2422  0005D8             	include		key_app.asm
+  2423  0005D8             ;******************************************************************
+  2424  0005D8             key_app:	
+  2425  0005D8             ;;****************************************
+  2426  0005D8             key_app100:				;;00:normal test mode
+  2427  0005D8   2E5A(1)  	b0mov	a,key_command		;;
+  2428  0005D9             key_app101:	
+  2429  0005D9             	@jmp_a	09h    ;跳表列表的数量为9个
+  2430  0005D9   03CE(1)  	b0add PCl ,a
+  2431  0005DA   8615(2)  	jmp	key_app90		;;无效
+  2432  0005DB   85DF(2)  	jmp	key_app110		;;01H: 短按电源键全显
+  2433  0005DC   85F8(2)  	jmp	key_app120		;;02H: 长按电源键关机
+  2434  0005DD   85FA(2)  	jmp	key_app130		;;03H：自动显示数字	
+  2435  0005DE   8600(2)  	jmp	key_app140		;;04H: 手动显示数字		
+  2436  0005DF             ;;****************************************
+  2437  0005DF             key_app110:
+  2438  0005DF   7050(1+S)          b0bts0     key_off1
+  2439  0005E0   85E2(2)          jmp        key_app110_1
+  2440  0005E1   85ED(2)          jmp        key_app110_2
+  2441  0005E2             
+  2442  0005E2             key_app110_1:
+  2443  0005E2             
+  2444  0005E2   6050(1)          b0bclr     key_off1
+  2445  0005E3   2B68(1)  	clr	num
+  2446  0005E4   6378(1)  	b0bclr	f_dis_zd
+  2447  0005E5   2D00(1)  	mov	a,#d_rdy_for_tst
+  2448  0005E6   2F6F(1)  	b0mov	dis_mode_buf,a	
+  2449  0005E7             	cpl_f	f_dis_app		;;0-全部显示，1-显示字符
+  2450  0005E7   5678(1+S)  	bts0	f_dis_app
+  2451  0005E8   85EB(2)  	jmp	$+3
+  2452  0005E9   4E78(1)  	bset	f_dis_app
+  2453  0005EA   85EC(2)  	jmp	$+2
+  2454  0005EB   4678(1)  	bclr	f_dis_app	
+  2455  0005EC   8611(2)  	jmp	key_app70
+  2456  0005ED             key_app110_2:
+  2457  0005ED             
+  2458  0005ED   6850(1)          b0bset     key_off1
+  2459  0005EE   2B68(1)  	clr	num
+  2460  0005EF   6378(1)  	b0bclr	f_dis_zd
+  2461  0005F0   2D00(1)  	mov	a,#d_rdy_for_tst
+  2462  0005F1   2F6F(1)  	b0mov	dis_mode_buf,a	
+  2463  0005F2             	cpl_f	f_dis_app		;;0-全部显示，1-显示字符
+  2464  0005F2   5678(1+S)  	bts0	f_dis_app
+  2465  0005F3   85F6(2)  	jmp	$+3
+  2466  0005F4   4E78(1)  	bset	f_dis_app
+  2467  0005F5   85F7(2)  	jmp	$+2
+  2468  0005F6   4678(1)  	bclr	f_dis_app	
+  2469  0005F7   8611(2)  	jmp	key_app70
+  2470  0005F8             ;;****************************************
+  2471  0005F8             key_app120:				;;关机
+  2472  0005F8   6D78(1)  	b0bset	f_turnoff
+  2473  0005F9   8611(2)  	jmp	key_app70
+  2474  0005FA             ;;****************************************
+  2475  0005FA             key_app130:
+  2476  0005FA   6378(1)  	b0bclr	f_dis_zd			;;0-自动显示，1-手动显示
+  2477  0005FB   6278(1)  	b0bclr	f_dis_mode
+  2478  0005FC   2B68(1)  	clr	num
+  2479  0005FD   2D01(1)  	mov	a,#d_obj_tst_ok
+  2480  0005FE   2F6F(1)  	b0mov	dis_mode_buf,a		
+  2481  0005FF   8611(2)   	jmp	key_app70
+  2482  000600             ;;****************************************;;
+  2483  000600             key_app140:
+  2484  000600   7B78(1+S)  	b0bts1	f_dis_zd
+  2485  000601   860B(2)  	jmp	key_app141
+  2486  000602             
+  2487  000602   1568(1+S)  	incs	num
+  2488  000603   0000(1)  	nop
+  2489  000604             	cjbe	a,#09,key_app142
+  2490  000604   0609(1+S)  		cmprs	a, #09
+  2491  000605   7A86(1+S)  		b0bts1	FC
+  2492  000606   860D(2)  		jmp	key_app142
+  2493  000607   7278(1+S)  	b0bts0	f_dis_mode			;;0-显示数字，1-显示点
+  2494  000608   860B(2)  	jmp	key_app141
+  2495  000609             	;b0bset	f_dis_mode
+  2496  000609   2D09(1)  	mov	a,#09
+  2497  00060A             	;jmp	key_app142
+  2498  00060A   860B(2)  	jmp	key_app141
+  2499  00060B             key_app141:
+  2500  00060B   6278(1)  	b0bclr	f_dis_mode			;;0-显示数字，1-显示点
+  2501  00060C   2D00(1)  	mov	a,#00
+  2502  00060D             key_app142:
+  2503  00060D   2F68(1)  	b0mov	num,a
+  2504  00060E   2D01(1)  	mov	a,#d_obj_tst_ok
+  2505  00060F   2F6F(1)  	b0mov	dis_mode_buf,a	
+  2506  000610   6B78(1)  	b0bset	f_dis_zd			;;0-自动显示，1-手动显示	
+  2507  000611             ;;********************************************
+  2508  000611             key_app70:
+  2509  000611   C374(2)  	call	enable_grn_led		
+  2510  000612             key_app80:
+  2511  000612   C326(2)  	call	update_timer00
+  2512  000613             key_app82:
+  2513  000613   6978(1)  	b0bset	f_update_disp
+  2514  000614             key_app83:
+  2515  000614   2B5A(1)  	clr	key_command
+  2516  000615             key_app90:
+  2517  000615   0E00(2)  	ret
+  2518  000616   FFFF(2)  dw	0ffffh
+  2519  000617   FFFF(2)  dw	0ffffh
+  2520  000618   FFFF(2)  dw	0ffffh
+  2521  000619   FFFF(2)  dw	0ffffh
+  2522  00061A   FFFF(2)  dw	0ffffh
+  2523  00061B   FFFF(2)  dw	0ffffh
+  2524  00061C   FFFF(2)  dw	0ffffh
+  2525  00061D   FFFF(2)  dw	0ffffh
+  2526  00061E   FFFF(2)  dw	0ffffh
+  2527  00061F   FFFF(2)  dw	0ffffh
+  2528  000620   FFFF(2)  dw	0ffffh
+  2529  000621   FFFF(2)  dw	0ffffh
+  2530  000622   FFFF(2)  dw	0ffffh
+  2531  000623   FFFF(2)  dw	0ffffh
+  2532  000624   FFFF(2)  dw	0ffffh
+  2533  000625   FFFF(2)  dw	0ffffh
+  2534  000626   FFFF(2)  dw	0ffffh
+  2535  000627   FFFF(2)  dw	0ffffh
+  2536  000628   FFFF(2)  dw	0ffffh
+  2537  000629   FFFF(2)  dw	0ffffh
+  2538  00062A   FFFF(2)  dw	0ffffh
+  2539  00062B   FFFF(2)  dw	0ffffh
+  2540  00062C   FFFF(2)  dw	0ffffh
+  2541  00062D   FFFF(2)  dw	0ffffh
+  2542  00062E   FFFF(2)  dw	0ffffh
+  2543  00062F   FFFF(2)  dw	0ffffh
+  2544  000630   FFFF(2)  dw	0ffffh
+  2545  000631   FFFF(2)  dw	0ffffh
+  2546  000632   FFFF(2)  dw	0ffffh
+  2547  000633   FFFF(2)  dw	0ffffh
+  2548  000634   FFFF(2)  dw	0ffffh
+  2549  000635   FFFF(2)  dw	0ffffh
+  2550  000636   FFFF(2)  dw	0ffffh
+  2551  000637   FFFF(2)  dw	0ffffh
+  2552  000638   FFFF(2)  dw	0ffffh
+  2553  000639   FFFF(2)  dw	0ffffh
+  2554  00063A   FFFF(2)  dw	0ffffh
+  2555  00063B   FFFF(2)  dw	0ffffh
+  2556  00063C   FFFF(2)  dw	0ffffh
+  2557  00063D   FFFF(2)  dw	0ffffh
+  2558  00063E   FFFF(2)  dw	0ffffh
+  2559  00063F   FFFF(2)  dw	0ffffh
+  2560  000640   FFFF(2)  dw	0ffffh
+  2561  000641   FFFF(2)  dw	0ffffh
+  2562  000642   FFFF(2)  dw	0ffffh
+  2563  000643   FFFF(2)  dw	0ffffh
+  2564  000644   FFFF(2)  dw	0ffffh
+  2565  000645   FFFF(2)  dw	0ffffh
+  2566  000646   FFFF(2)  dw	0ffffh
+  2567  000647   FFFF(2)  dw	0ffffh
+  2568  000648   FFFF(2)  dw	0ffffh
+  2569  000649   FFFF(2)  dw	0ffffh
+  2570  00064A   FFFF(2)  dw	0ffffh
+  2571  00064B   FFFF(2)  dw	0ffffh
+  2572  00064C   FFFF(2)  dw	0ffffh
+  2573  00064D   FFFF(2)  dw	0ffffh
+  2574  00064E   FFFF(2)  dw	0ffffh
+  2575  00064F   FFFF(2)  dw	0ffffh
+  2576  000650   FFFF(2)  dw	0ffffh
+  2577  000651   FFFF(2)  dw	0ffffh
+  2578  000652   FFFF(2)  dw	0ffffh
+  2579  000653   FFFF(2)  dw	0ffffh
+  2580  000654   FFFF(2)  dw	0ffffh
+  2581  000655   FFFF(2)  dw	0ffffh
+  2582  000656   FFFF(2)  dw	0ffffh
+  2583  000657   FFFF(2)  dw	0ffffh
+  2584  000658   FFFF(2)  dw	0ffffh
+  2585  000659   FFFF(2)  dw	0ffffh
+  2586  00065A   FFFF(2)  dw	0ffffh
+  2587  00065B   FFFF(2)  dw	0ffffh
+  2588  00065C   FFFF(2)  dw	0ffffh
+  2589  00065D   FFFF(2)  dw	0ffffh
+  2590  00065E   FFFF(2)  dw	0ffffh
+  2591  00065F   FFFF(2)  dw	0ffffh
+  2592  000660   FFFF(2)  dw	0ffffh
+  2593  000661   FFFF(2)  dw	0ffffh
+  2594  000662   FFFF(2)  dw	0ffffh
+  2595  000663   FFFF(2)  dw	0ffffh
+  2596  000664   FFFF(2)  dw	0ffffh
+  2597  000665   FFFF(2)  dw	0ffffh
+  2598  000666   FFFF(2)  dw	0ffffh
+  2599  000667   FFFF(2)  dw	0ffffh
+  2600  000668   FFFF(2)  dw	0ffffh
+  2601  000669   FFFF(2)  dw	0ffffh
+  2602  00066A   FFFF(2)  dw	0ffffh
+  2603  00066B   FFFF(2)  dw	0ffffh
+  2604  00066C   FFFF(2)  dw	0ffffh
+  2605  00066D   FFFF(2)  dw	0ffffh
+  2606  00066E   FFFF(2)  dw	0ffffh
+  2607  00066F   FFFF(2)  dw	0ffffh
+  2608  000670   FFFF(2)  dw	0ffffh
+  2609  000671   FFFF(2)  dw	0ffffh
+  2610  000672   FFFF(2)  dw	0ffffh
+  2611  000673   FFFF(2)  dw	0ffffh
+  2612  000674   FFFF(2)  dw	0ffffh
+  2613  000675   FFFF(2)  dw	0ffffh
+  2614  000676   FFFF(2)  dw	0ffffh
+  2615  000677   FFFF(2)  dw	0ffffh
+  2616  000678   FFFF(2)  dw	0ffffh
+  2617  000679   FFFF(2)  dw	0ffffh
+  2618  00067A   FFFF(2)  dw	0ffffh
+  2619  00067B   FFFF(2)  dw	0ffffh
+  2620  00067C   FFFF(2)  dw	0ffffh
+  2621  00067D   FFFF(2)  dw	0ffffh
+  2622  00067E   FFFF(2)  dw	0ffffh
+  2623  00067F   FFFF(2)  dw	0ffffh
+  2624  000680   FFFF(2)  dw	0ffffh
+  2625  000681   FFFF(2)  dw	0ffffh
+  2626  000682   FFFF(2)  dw	0ffffh
+  2627  000683   FFFF(2)  dw	0ffffh
+  2628  000684   FFFF(2)  dw	0ffffh
+  2629  000685   FFFF(2)  dw	0ffffh
+  2630  000686   FFFF(2)  dw	0ffffh
+  2631  000687   FFFF(2)  dw	0ffffh
+  2632  000688   FFFF(2)  dw	0ffffh
+  2633  000689   FFFF(2)  dw	0ffffh
+  2634  00068A   FFFF(2)  dw	0ffffh
+  2635  00068B   FFFF(2)  dw	0ffffh
+  2636  00068C   FFFF(2)  dw	0ffffh
+  2637  00068D   FFFF(2)  dw	0ffffh
+  2638  00068E   FFFF(2)  dw	0ffffh
+  2639  00068F   FFFF(2)  dw	0ffffh
+  2640  000690   FFFF(2)  dw	0ffffh
+  2641  000691   FFFF(2)  dw	0ffffh
+  2642  000692   FFFF(2)  dw	0ffffh
+  2643  000693   FFFF(2)  dw	0ffffh
+  2644  000694   FFFF(2)  dw	0ffffh
+  2645  000695   FFFF(2)  dw	0ffffh
+  2646  000696   FFFF(2)  dw	0ffffh
+  2647  000697   FFFF(2)  dw	0ffffh
+  2648  000698   FFFF(2)  dw	0ffffh
+  2649  000699   FFFF(2)  dw	0ffffh
+  2650  00069A   FFFF(2)  dw	0ffffh
+  2651  00069B   FFFF(2)  dw	0ffffh
+  2652  00069C   FFFF(2)  dw	0ffffh
+  2653  00069D   FFFF(2)  dw	0ffffh
+  2654  00069E   FFFF(2)  dw	0ffffh
+  2655  00069F   FFFF(2)  dw	0ffffh
+  2656  0006A0   FFFF(2)  dw	0ffffh
+  2657  0006A1   FFFF(2)  dw	0ffffh
+  2658  0006A2   FFFF(2)  dw	0ffffh
+  2659  0006A3   FFFF(2)  dw	0ffffh
+  2660  0006A4   FFFF(2)  dw	0ffffh
+  2661  0006A5   FFFF(2)  dw	0ffffh
+  2662  0006A6   FFFF(2)  dw	0ffffh
+  2663  0006A7   FFFF(2)  dw	0ffffh
+  2664  0006A8   FFFF(2)  dw	0ffffh
+  2665  0006A9   FFFF(2)  dw	0ffffh
+  2666  0006AA   FFFF(2)  dw	0ffffh
+  2667  0006AB   FFFF(2)  dw	0ffffh
+  2668  0006AC   FFFF(2)  dw	0ffffh
+  2669  0006AD   FFFF(2)  dw	0ffffh
+  2670  0006AE   FFFF(2)  dw	0ffffh
+  2671  0006AF   FFFF(2)  dw	0ffffh
+  2672  0006B0   FFFF(2)  dw	0ffffh
+  2673  0006B1   FFFF(2)  dw	0ffffh
+  2674  0006B2   FFFF(2)  dw	0ffffh
+  2675  0006B3   FFFF(2)  dw	0ffffh
+  2676  0006B4   FFFF(2)  dw	0ffffh
+  2677  0006B5   FFFF(2)  dw	0ffffh
+  2678  0006B6   FFFF(2)  dw	0ffffh
+  2679  0006B7   FFFF(2)  dw	0ffffh
+  2680  0006B8   FFFF(2)  dw	0ffffh
+  2681  0006B9   FFFF(2)  dw	0ffffh
+  2682  0006BA   FFFF(2)  dw	0ffffh
+  2683  0006BB   FFFF(2)  dw	0ffffh
+  2684  0006BC   FFFF(2)  dw	0ffffh
+  2685  0006BD   FFFF(2)  dw	0ffffh
+  2686  0006BE   FFFF(2)  dw	0ffffh
+  2687  0006BF   FFFF(2)  dw	0ffffh
+  2688  0006C0   FFFF(2)  dw	0ffffh
+  2689  0006C1   FFFF(2)  dw	0ffffh
+  2690  0006C2   FFFF(2)  dw	0ffffh
+  2691  0006C3   FFFF(2)  dw	0ffffh
+  2692  0006C4   FFFF(2)  dw	0ffffh
+  2693  0006C5   FFFF(2)  dw	0ffffh
+  2694  0006C6   FFFF(2)  dw	0ffffh
+  2695  0006C7   FFFF(2)  dw	0ffffh
+  2696  0006C8   FFFF(2)  dw	0ffffh
+  2697  0006C9   FFFF(2)  dw	0ffffh
+  2698  0006CA   FFFF(2)  dw	0ffffh
+  2699  0006CB   FFFF(2)  dw	0ffffh
+  2700  0006CC   FFFF(2)  dw	0ffffh
+  2701  0006CD   FFFF(2)  dw	0ffffh
+  2702  0006CE   FFFF(2)  dw	0ffffh
+  2703  0006CF   FFFF(2)  dw	0ffffh
+  2704  0006D0   FFFF(2)  dw	0ffffh
+  2705  0006D1   FFFF(2)  dw	0ffffh
+  2706  0006D2   FFFF(2)  dw	0ffffh
+  2707  0006D3   FFFF(2)  dw	0ffffh
+  2708  0006D4   FFFF(2)  dw	0ffffh
+  2709  0006D5   FFFF(2)  dw	0ffffh
+  2710  0006D6   FFFF(2)  dw	0ffffh
+  2711  0006D7   FFFF(2)  dw	0ffffh
+  2712  0006D8   FFFF(2)  dw	0ffffh
+  2713  0006D9   FFFF(2)  dw	0ffffh
+  2714  0006DA   FFFF(2)  dw	0ffffh
+  2715  0006DB   FFFF(2)  dw	0ffffh
+  2716  0006DC   FFFF(2)  dw	0ffffh
+  2717  0006DD   FFFF(2)  dw	0ffffh
+  2718  0006DE   FFFF(2)  dw	0ffffh
+  2719  0006DF   FFFF(2)  dw	0ffffh
+  2720  0006E0   FFFF(2)  dw	0ffffh
+  2721  0006E1   FFFF(2)  dw	0ffffh
+  2722  0006E2   FFFF(2)  dw	0ffffh
+  2723  0006E3   FFFF(2)  dw	0ffffh
+  2724  0006E4   FFFF(2)  dw	0ffffh
+  2725  0006E5   FFFF(2)  dw	0ffffh
+  2726  0006E6   FFFF(2)  dw	0ffffh
+  2727  0006E7   FFFF(2)  dw	0ffffh
+  2728  0006E8   FFFF(2)  dw	0ffffh
+  2729  0006E9   FFFF(2)  dw	0ffffh
+  2730  0006EA   FFFF(2)  dw	0ffffh
+  2731  0006EB   FFFF(2)  dw	0ffffh
+  2732  0006EC   FFFF(2)  dw	0ffffh
+  2733  0006ED   FFFF(2)  dw	0ffffh
+  2734  0006EE   FFFF(2)  dw	0ffffh
+  2735  0006EF   FFFF(2)  dw	0ffffh
+  2736  0006F0   FFFF(2)  dw	0ffffh
+  2737  0006F1   FFFF(2)  dw	0ffffh
+  2738  0006F2   FFFF(2)  dw	0ffffh
+  2739  0006F3   FFFF(2)  dw	0ffffh
+  2740  0006F4   FFFF(2)  dw	0ffffh
+  2741  0006F5   FFFF(2)  dw	0ffffh
+  2742  0006F6   FFFF(2)  dw	0ffffh
+  2743  0006F7   FFFF(2)  dw	0ffffh
+  2744  0006F8   FFFF(2)  dw	0ffffh
+  2745  0006F9   FFFF(2)  dw	0ffffh
+  2746  0006FA   FFFF(2)  dw	0ffffh
+  2747  0006FB   FFFF(2)  dw	0ffffh
+  2748  0006FC   FFFF(2)  dw	0ffffh
+  2749  0006FD   FFFF(2)  dw	0ffffh
+  2750  0006FE   FFFF(2)  dw	0ffffh
+  2751  0006FF   FFFF(2)  dw	0ffffh
+  2752  000700   FFFF(2)  dw	0ffffh
+  2753  000701   FFFF(2)  dw	0ffffh
+  2754  000702   FFFF(2)  dw	0ffffh
+  2755  000703   FFFF(2)  dw	0ffffh
+  2756  000704   FFFF(2)  dw	0ffffh
+  2757  000705   FFFF(2)  dw	0ffffh
+  2758  000706   FFFF(2)  dw	0ffffh
+  2759  000707   FFFF(2)  dw	0ffffh
+  2760  000708   FFFF(2)  dw	0ffffh
+  2761  000709   FFFF(2)  dw	0ffffh
+  2762  00070A   FFFF(2)  dw	0ffffh
+  2763  00070B   FFFF(2)  dw	0ffffh
+  2764  00070C   FFFF(2)  dw	0ffffh
+  2765  00070D   FFFF(2)  dw	0ffffh
+  2766  00070E   FFFF(2)  dw	0ffffh
+  2767  00070F   FFFF(2)  dw	0ffffh
+  2768  000710   FFFF(2)  dw	0ffffh
+  2769  000711   FFFF(2)  dw	0ffffh
+  2770  000712   FFFF(2)  dw	0ffffh
+  2771  000713   FFFF(2)  dw	0ffffh
+  2772  000714   FFFF(2)  dw	0ffffh
+  2773  000715   FFFF(2)  dw	0ffffh
+  2774  000716   FFFF(2)  dw	0ffffh
+  2775  000717   FFFF(2)  dw	0ffffh
+  2776  000718   FFFF(2)  dw	0ffffh
+  2777  000719   FFFF(2)  dw	0ffffh
+  2778  00071A   FFFF(2)  dw	0ffffh
+  2779  00071B   FFFF(2)  dw	0ffffh
+  2780  00071C   FFFF(2)  dw	0ffffh
+  2781  00071D   FFFF(2)  dw	0ffffh
+  2782  00071E   FFFF(2)  dw	0ffffh
+  2783  00071F   FFFF(2)  dw	0ffffh
+  2784  000720   FFFF(2)  dw	0ffffh
+  2785  000721   FFFF(2)  dw	0ffffh
+  2786  000722   FFFF(2)  dw	0ffffh
+  2787  000723   FFFF(2)  dw	0ffffh
+  2788  000724   FFFF(2)  dw	0ffffh
+  2789  000725   FFFF(2)  dw	0ffffh
+  2790  000726   FFFF(2)  dw	0ffffh
+  2791  000727   FFFF(2)  dw	0ffffh
+  2792  000728   FFFF(2)  dw	0ffffh
+  2793  000729   FFFF(2)  dw	0ffffh
+  2794  00072A   FFFF(2)  dw	0ffffh
+  2795  00072B   FFFF(2)  dw	0ffffh
+  2796  00072C   FFFF(2)  dw	0ffffh
+  2797  00072D   FFFF(2)  dw	0ffffh
+  2798  00072E   FFFF(2)  dw	0ffffh
+  2799  00072F   FFFF(2)  dw	0ffffh
+  2800  000730   FFFF(2)  dw	0ffffh
+  2801  000731   FFFF(2)  dw	0ffffh
+  2802  000732   FFFF(2)  dw	0ffffh
+  2803  000733   FFFF(2)  dw	0ffffh
+  2804  000734   FFFF(2)  dw	0ffffh
+  2805  000735   FFFF(2)  dw	0ffffh
+  2806  000736   FFFF(2)  dw	0ffffh
+  2807  000737   FFFF(2)  dw	0ffffh
+  2808  000738   FFFF(2)  dw	0ffffh
+  2809  000739   FFFF(2)  dw	0ffffh
+  2810  00073A   FFFF(2)  dw	0ffffh
+  2811  00073B   FFFF(2)  dw	0ffffh
+  2812  00073C   FFFF(2)  dw	0ffffh
+  2813  00073D   FFFF(2)  dw	0ffffh
+  2814  00073E   FFFF(2)  dw	0ffffh
+  2815  00073F   FFFF(2)  dw	0ffffh
+  2816  000740   FFFF(2)  dw	0ffffh
+  2817  000741   FFFF(2)  dw	0ffffh
+  2818  000742   FFFF(2)  dw	0ffffh
+  2819  000743   FFFF(2)  dw	0ffffh
+  2820  000744   FFFF(2)  dw	0ffffh
+  2821  000745   FFFF(2)  dw	0ffffh
+  2822  000746   FFFF(2)  dw	0ffffh
+  2823  000747   FFFF(2)  dw	0ffffh
+  2824  000748   FFFF(2)  dw	0ffffh
+  2825  000749   FFFF(2)  dw	0ffffh
+  2826  00074A   FFFF(2)  dw	0ffffh
+  2827  00074B   FFFF(2)  dw	0ffffh
+  2828  00074C   FFFF(2)  dw	0ffffh
+  2829  00074D   FFFF(2)  dw	0ffffh
+  2830  00074E   FFFF(2)  dw	0ffffh
+  2831  00074F   FFFF(2)  dw	0ffffh
+  2832  000750   FFFF(2)  dw	0ffffh
+  2833  000751   FFFF(2)  dw	0ffffh
+  2834  000752   FFFF(2)  dw	0ffffh
+  2835  000753   FFFF(2)  dw	0ffffh
+  2836  000754   FFFF(2)  dw	0ffffh
+  2837  000755   FFFF(2)  dw	0ffffh
+  2838  000756   FFFF(2)  dw	0ffffh
+  2839  000757   FFFF(2)  dw	0ffffh
+  2840  000758   FFFF(2)  dw	0ffffh
+  2841  000759   FFFF(2)  dw	0ffffh
+  2842  00075A   FFFF(2)  dw	0ffffh
+  2843  00075B   FFFF(2)  dw	0ffffh
+  2844  00075C   FFFF(2)  dw	0ffffh
+  2845  00075D   FFFF(2)  dw	0ffffh
+  2846  00075E   FFFF(2)  dw	0ffffh
+  2847  00075F   FFFF(2)  dw	0ffffh
+  2848  000760   FFFF(2)  dw	0ffffh
+  2849  000761   FFFF(2)  dw	0ffffh
+  2850  000762   FFFF(2)  dw	0ffffh
+  2851  000763   FFFF(2)  dw	0ffffh
+  2852  000764   FFFF(2)  dw	0ffffh
+  2853  000765   FFFF(2)  dw	0ffffh
+  2854  000766   FFFF(2)  dw	0ffffh
+  2855  000767   FFFF(2)  dw	0ffffh
+  2856  000768   FFFF(2)  dw	0ffffh
+  2857  000769   FFFF(2)  dw	0ffffh
+  2858  00076A   FFFF(2)  dw	0ffffh
+  2859  00076B   FFFF(2)  dw	0ffffh
+  2860  00076C   FFFF(2)  dw	0ffffh
+  2861  00076D   FFFF(2)  dw	0ffffh
+  2862  00076E   FFFF(2)  dw	0ffffh
+  2863  00076F   FFFF(2)  dw	0ffffh
+  2864  000770   FFFF(2)  dw	0ffffh
+  2865  000771   FFFF(2)  dw	0ffffh
+  2866  000772   FFFF(2)  dw	0ffffh
+  2867  000773   FFFF(2)  dw	0ffffh
+  2868  000774   FFFF(2)  dw	0ffffh
+  2869  000775   FFFF(2)  dw	0ffffh
+  2870  000776   FFFF(2)  dw	0ffffh
+  2871  000777   FFFF(2)  dw	0ffffh
+  2872  000778   FFFF(2)  dw	0ffffh
+  2873  000779   FFFF(2)  dw	0ffffh
+  2874  00077A   FFFF(2)  dw	0ffffh
+  2875  00077B   FFFF(2)  dw	0ffffh
+  2876  00077C   FFFF(2)  dw	0ffffh
+  2877  00077D   FFFF(2)  dw	0ffffh
+  2878  00077E   FFFF(2)  dw	0ffffh
+  2879  00077F   FFFF(2)  dw	0ffffh
+  2880  000780   FFFF(2)  dw	0ffffh
+  2881  000781   FFFF(2)  dw	0ffffh
+  2882  000782   FFFF(2)  dw	0ffffh
+  2883  000783   FFFF(2)  dw	0ffffh
+  2884  000784   FFFF(2)  dw	0ffffh
+  2885  000785   FFFF(2)  dw	0ffffh
+  2886  000786   FFFF(2)  dw	0ffffh
+  2887  000787   FFFF(2)  dw	0ffffh
+  2888  000788   FFFF(2)  dw	0ffffh
+  2889  000789   FFFF(2)  dw	0ffffh
+  2890  00078A   FFFF(2)  dw	0ffffh
+  2891  00078B   FFFF(2)  dw	0ffffh
+  2892  00078C   FFFF(2)  dw	0ffffh
+  2893  00078D   FFFF(2)  dw	0ffffh
+  2894  00078E   FFFF(2)  dw	0ffffh
+  2895  00078F   FFFF(2)  dw	0ffffh
+  2896  000790   FFFF(2)  dw	0ffffh
+  2897  000791   FFFF(2)  dw	0ffffh
+  2898  000792   FFFF(2)  dw	0ffffh
+  2899  000793   FFFF(2)  dw	0ffffh
+  2900  000794   FFFF(2)  dw	0ffffh
+  2901  000795   FFFF(2)  dw	0ffffh
+  2902  000796   FFFF(2)  dw	0ffffh
+  2903  000797   FFFF(2)  dw	0ffffh
+  2904  000798   FFFF(2)  dw	0ffffh
+  2905  000799   FFFF(2)  dw	0ffffh
+  2906  00079A   FFFF(2)  dw	0ffffh
+  2907  00079B   FFFF(2)  dw	0ffffh
+  2908  00079C   FFFF(2)  dw	0ffffh
+  2909  00079D   FFFF(2)  dw	0ffffh
+  2910  00079E   FFFF(2)  dw	0ffffh
+  2911  00079F   FFFF(2)  dw	0ffffh
+  2912  0007A0   FFFF(2)  dw	0ffffh
+  2913  0007A1   FFFF(2)  dw	0ffffh
+  2914  0007A2   FFFF(2)  dw	0ffffh
+  2915  0007A3   FFFF(2)  dw	0ffffh
+  2916  0007A4   FFFF(2)  dw	0ffffh
+  2917  0007A5   FFFF(2)  dw	0ffffh
+  2918  0007A6   FFFF(2)  dw	0ffffh
+  2919  0007A7   FFFF(2)  dw	0ffffh
+  2920  0007A8   FFFF(2)  dw	0ffffh
+  2921  0007A9   FFFF(2)  dw	0ffffh
+  2922  0007AA   FFFF(2)  dw	0ffffh
+  2923  0007AB   FFFF(2)  dw	0ffffh
+  2924  0007AC   FFFF(2)  dw	0ffffh
+  2925  0007AD   FFFF(2)  dw	0ffffh
+  2926  0007AE   FFFF(2)  dw	0ffffh
+  2927  0007AF   FFFF(2)  dw	0ffffh
+  2928  0007B0   FFFF(2)  dw	0ffffh
+  2929  0007B1   FFFF(2)  dw	0ffffh
+  2930  0007B2   FFFF(2)  dw	0ffffh
+  2931  0007B3   FFFF(2)  dw	0ffffh
+  2932  0007B4   FFFF(2)  dw	0ffffh
+  2933  0007B5   FFFF(2)  dw	0ffffh
+  2934  0007B6   FFFF(2)  dw	0ffffh
+  2935  0007B7   FFFF(2)  dw	0ffffh
+  2936  0007B8   FFFF(2)  dw	0ffffh
+  2937  0007B9   FFFF(2)  dw	0ffffh
+  2938  0007BA   FFFF(2)  dw	0ffffh
+  2939  0007BB   FFFF(2)  dw	0ffffh
+  2940  0007BC   FFFF(2)  dw	0ffffh
+  2941  0007BD   FFFF(2)  dw	0ffffh
+  2942  0007BE   FFFF(2)  dw	0ffffh
+  2943  0007BF   FFFF(2)  dw	0ffffh
+  2944  0007C0   FFFF(2)  dw	0ffffh
+  2945  0007C1   FFFF(2)  dw	0ffffh
+  2946  0007C2   FFFF(2)  dw	0ffffh
+  2947  0007C3   FFFF(2)  dw	0ffffh
+  2948  0007C4   FFFF(2)  dw	0ffffh
+  2949  0007C5   FFFF(2)  dw	0ffffh
+  2950  0007C6   FFFF(2)  dw	0ffffh
+  2951  0007C7   FFFF(2)  dw	0ffffh
+  2952  0007C8   FFFF(2)  dw	0ffffh
+  2953  0007C9   FFFF(2)  dw	0ffffh
+  2954  0007CA   FFFF(2)  dw	0ffffh
+  2955  0007CB   FFFF(2)  dw	0ffffh
+  2956  0007CC   FFFF(2)  dw	0ffffh
+  2957  0007CD   FFFF(2)  dw	0ffffh
+  2958  0007CE   FFFF(2)  dw	0ffffh
+  2959  0007CF   FFFF(2)  dw	0ffffh
+  2960  0007D0   FFFF(2)  dw	0ffffh
+  2961  0007D1   FFFF(2)  dw	0ffffh
+  2962  0007D2   FFFF(2)  dw	0ffffh
+  2963  0007D3   FFFF(2)  dw	0ffffh
+  2964  0007D4   FFFF(2)  dw	0ffffh
+  2965  0007D5   FFFF(2)  dw	0ffffh
+  2966  0007D6   FFFF(2)  dw	0ffffh
+  2967  0007D7   FFFF(2)  dw	0ffffh
+  2968  0007D8   FFFF(2)  dw	0ffffh
+  2969  0007D9   FFFF(2)  dw	0ffffh
+  2970  0007DA   FFFF(2)  dw	0ffffh
+  2971  0007DB   FFFF(2)  dw	0ffffh
+  2972  0007DC   FFFF(2)  dw	0ffffh
+  2973  0007DD   FFFF(2)  dw	0ffffh
+  2974  0007DE   FFFF(2)  dw	0ffffh
+  2975  0007DF   FFFF(2)  dw	0ffffh
+  2976  0007E0             
+  2977  0007E0             
+  2978  0007E0             	
+  2979  0007E0             
+  2980  0007E0             	
+  2981  0007E0             	include		lcd.asm
+  2982  0007E0             ;*************************************************************************************
+  2983  0007E0             ;NAME:			lcd_display
+  2984  0007E0             ;INPUT:			
+  2985  0007E0             ;			
+  2986  0007E0             ;FUNCTION:		
+  2987  0007E0             ;DESCRIBE:		
+  2988  0007E0             ;CALL SUBPROGRAM:	NONE
+  2989  0007E0             ;USING RESOURCE:	
+  2990  0007E0             ;STACK NEED:		0
+  2991  0007E0             ;OUTPUT:		NONE
+  2992  0007E0             ;*************************************************************************************
+  2993  0007E0             lcd_display:
+  2994  0007E0   3100(1)  	b0mov	h,#dis_data_buf$m
+  2995  0007E1   3073(1)  	b0mov	l,#dis_data_buf$l+3	;backup address	
+  2996  0007E2             	B0MOV_	wk12,#04		;total bit
+  2997  0007E2   2D04(1)  	mov	a, #04
+  2998  0007E3   2F0C(1)  	b0mov	wk12, a
+  2999  0007E4             	B0MOV_	wk09,#01h		;start 		
+  3000  0007E4   2D01(1)  	mov	a, #01h
+  3001  0007E5   2F09(1)  	b0mov	wk09, a
+  3002  0007E6             lcd_display20:
+  3003  0007E6   3400(1)  	b0mov   y,#LCD_TABLE$m    ;LCD_TABLE2 显示20210320
+  3004  0007E7   3350(1)  	b0mov	z,#LCD_TABLE$l
+  3005  0007E8   1EE8(1)  	mov	a,@hl
+  3006  0007E9   1383(1)  	add	z,a
+  3007  0007EA   2D00(1)  	mov	a,#00
+  3008  0007EB   1184(1)  	adc	y,a
+  3009  0007EC   0D00(2)  	movc
+  3010  0007ED   2F00(1)  	b0mov	wk00,a
+  3011  0007EE             	
+  3012  0007EE             
+  3013  0007EE             	B0MOV_	z,wk09
+  3014  0007EE   2E09(1)  	b0mov	a, wk09
+  3015  0007EF   2F83(1)  	b0mov	z, a
+  3016  0007F0   340F(1)  	b0mov	y,#0fh
+  3017  0007F1   2E00(1)  	b0mov	a,wk00
+  3018  0007F2                 ;    b0bts1  r.3
+  3019  0007F2                  ;   b0bts0  r.2
+  3020  0007F2                   ;  jmp     lcd_display30 
+  3021  0007F2                    ; ret
+  3022  0007F2             lcd_display30:       
+  3023  0007F2   1FE7(1)  	mov	@yz,a
+  3024  0007F3                     ;b0bts0  r.2  r.0 r.1 r.2 r.3 
+  3025  0007F3   1683(1+S)  	incms	z
+  3026  0007F4             
+  3027  0007F4   2E82(1)  	b0mov	a,r
+  3028  0007F5   1FE7(1)  	mov	@yz,a
+  3029  0007F6             lcd_display40:
+  3030  0007F6   2D02(1)  	mov	a,#02h
+  3031  0007F7   1309(1)  	add	wk09,a
+  3032  0007F8   2680(1+S)  	decms	l
+  3033  0007F9   260C(1+S)  	decms	wk12
+  3034  0007FA   87E6(2)  	jmp	lcd_display20
+  3035  0007FB             lcd_display90:		
+  3036  0007FB             ;*****************************************************************
+  3037  0007FB             ;NAME:			lcd_display
+  3038  0007FB             ;INPUT:			
+  3039  0007FB             ;			
+  3040  0007FB             ;FUNCTION:		
+  3041  0007FB             ;DESCRIBE:		
+  3042  0007FB             ;CALL SUBPROGRAM:	NONE
+  3043  0007FB             ;USING RESOURCE:	
+  3044  0007FB             ;STACK NEED:		0
+  3045  0007FB             ;OUTPUT:		NONE
+  3046  0007FB             ;******************************************************************
+  3047  0007FB             lcd_bit_app:
+  3048  0007FB   370F(1)  	b0mov	rbank,#0fh
+  3049  0007FC   2E76(1)  	B0mov	a,lcd_dot1
+  3050  0007FD   2A0F(1)  	and	a,#0fh
+  3051  0007FE   370F(1)  	b0mov	rbank,#0fh
+  3052  0007FF   1F00(1)  	mov	00h,a
+  3053  000800   3700(1)  	b0mov	rbank,#00h
+  3054  000801   1776(1)  	swap	lcd_dot1
+  3055  000802   2A0F(1)  	and	a,#0fh
+  3056  000803   370F(1)  	b0mov	rbank,#0fh
+  3057  000804   1F09(1)  	mov	09h,a
+  3058  000805             	
+  3059  000805   4301(1)   	bclr	r_data_1
+  3060  000806   7077(1+S)  	b0bts0	f_data_1
+  3061  000807   4B01(1)  	bset	r_data_1			;;小数点
+  3062  000808             	
+  3063  000808   4307(1)  	bclr	r_memo_1
+  3064  000809   7277(1+S)  	b0bts0	f_memo_1
+  3065  00080A   4B07(1)  	bset	r_memo_1			
+  3066  00080B             
+  3067  00080B   4305(1)  	bclr	r_point
+  3068  00080C   7177(1+S)  	b0bts0	f_point
+  3069  00080D   4B05(1)  	bset	r_point			;;小数点
+  3070  00080E             
+  3071  00080E   4303(1)  	bclr	r_F
+  3072  00080F   7377(1+S)  	b0bts0	f_F
+  3073  000810   4B03(1)  	bset	r_F			;;F
+  3074  000811             
+  3075  000811             ;	b0bts0	f_buz_x			;;
+  3076  000811             ;	bset	r_buz_x			;;蜂鸣器符号
+  3077  000811             
+  3078  000811             ;	b0bts0	f_buz			;;
+  3079  000811             ;	bset	r_buz			;;蜂鸣器符号
+  3080  000811             
+  3081  000811             ;	b0bts0	f_memo
+  3082  000811             ;	bset	r_memo			;;M记忆符号
+  3083  000811             
+  3084  000811             ;	b0bts0	f_suf
+  3085  000811             ;	bset	r_body			;;体温符号
+  3086  000811             
+  3087  000811             ;	b0bts0	f_suf
+  3088  000811             ;	bset	r_suf			;;体表模式符号
+  3089  000811             
+  3090  000811             ;	b0bts0	f_bat1			
+  3091  000811             ;	bset	r_bat0			;;电池符号
+  3092  000811             
+  3093  000811             ;	b0bts0	f_c			
+  3094  000811             ;	bset	r_c			;;℃
+  3095  000811             	
+  3096  000811   3700(1)  	b0mov	rbank,#00h
+  3097  000812             
+  3098  000812             lcd_bit_app90:	
+  3099  000812   0E00(2)  	ret
+  3100  000813                     INCLUDE         I2C.ASM	
+  3101  000813             I2C_START:                ;SCL高,SDA由高变低，产生起始信号
+  3102  000813                      WRITEMODE
+  3103  000813   6FB8(1)                B0bset  sda_mode
+  3104  000814   0000(1)                  NOP
+  3105  000815   0000(1)                  NOP
+  3106  000816   0000(1)                  NOP
+  3107  000817   0000(1)                  NOP
+  3108  000818   0000(1)                  NOP
+  3109  000819   881A(2)                jmp    $+1
+  3110  00081A                      SCLL
+  3111  00081A   6EB8(1)  		b0bset	SCL_MODE
+  3112  00081B   881C(2)  		jmp	$+1
+  3113  00081C   66D0(1)  		b0bclr 	SCL
+  3114  00081D   0000(1)                  NOP
+  3115  00081E   0000(1)                  NOP
+  3116  00081F   0000(1)                  NOP
+  3117  000820   0000(1)                  NOP
+  3118  000821   0000(1)                  NOP
+  3119  000822   0000(1)                  NOP
+  3120  000823   0000(1)                  NOP
+  3121  000824   0000(1)                  NOP
+  3122  000825   0000(1)                  NOP
+  3123  000826   0000(1)                  NOP
+  3124  000827   0000(1)                  NOP
+  3125  000828                      SDAH
+  3126  000828   6FD0(1)  		b0bset SDA
+  3127  000829   0000(1)                  NOP
+  3128  00082A   0000(1)                  NOP
+  3129  00082B   0000(1)                  NOP
+  3130  00082C   0000(1)                  NOP
+  3131  00082D   0000(1)                  NOP
+  3132  00082E   0000(1)                  NOP 
+  3133  00082F   0000(1)                  NOP
+  3134  000830   0000(1)                  NOP
+  3135  000831   0000(1)                  NOP
+  3136  000832   0000(1)                  NOP
+  3137  000833   0000(1)                  NOP
+  3138  000834   8835(2)  		jmp	$+1
+  3139  000835                      SCLH
+  3140  000835   6EB8(1)  		b0bset	SCL_MODE
+  3141  000836   8837(2)  		jmp	$+1
+  3142  000837   6ED0(1)  		b0bset 	SCL
+  3143  000838   0000(1)                  NOP
+  3144  000839   0000(1)                  NOP
+  3145  00083A   0000(1)                  NOP
+  3146  00083B   0000(1)                  NOP
+  3147  00083C   0000(1)                  NOP
+  3148  00083D   0000(1)                  NOP
+  3149  00083E   0000(1)                  NOP
+  3150  00083F   0000(1)                  NOP
+  3151  000840   0000(1)                  NOP	
+  3152  000841   0000(1)                  NOP
+  3153  000842   0000(1)                  NOP
+  3154  000843                      SDAL
+  3155  000843   67D0(1)  		b0bclr SDA
+  3156  000844   0000(1)                  NOP
+  3157  000845   0000(1)                  NOP
+  3158  000846   0000(1)                  NOP
+  3159  000847   0000(1)                  NOP
+  3160  000848   0000(1)                  NOP
+  3161  000849   0000(1)                  NOP
+  3162  00084A   0000(1)                  NOP
+  3163  00084B   0000(1)                  NOP
+  3164  00084C   0000(1)                  NOP
+  3165  00084D   0000(1)                  NOP
+  3166  00084E   0000(1)                  NOP
+  3167  00084F   8850(2)  		jmp	$+1
+  3168  000850                      ;CALL DELAY5US
+  3169  000850                      ;SCLL
+  3170  000850   0E00(2)           RET
+  3171  000851             
+  3172  000851             I2C_STOP:                 ;SCL高,SDA由低变高，产生终止信号
+  3173  000851                     WRITEMODE
+  3174  000851   6FB8(1)                B0bset  sda_mode
+  3175  000852   0000(1)                  NOP
+  3176  000853   0000(1)                  NOP
+  3177  000854   0000(1)                  NOP
+  3178  000855   0000(1)                  NOP
+  3179  000856   0000(1)                  NOP
+  3180  000857   8858(2)                jmp    $+1
+  3181  000858                     SCLL
+  3182  000858   6EB8(1)  		b0bset	SCL_MODE
+  3183  000859   885A(2)  		jmp	$+1
+  3184  00085A   66D0(1)  		b0bclr 	SCL
+  3185  00085B   0000(1)                  NOP
+  3186  00085C   0000(1)                  NOP
+  3187  00085D   0000(1)                  NOP
+  3188  00085E   0000(1)                  NOP
+  3189  00085F   0000(1)                  NOP
+  3190  000860   0000(1)                  NOP
+  3191  000861   0000(1)                  NOP
+  3192  000862   0000(1)                  NOP
+  3193  000863   0000(1)                  NOP
+  3194  000864   0000(1)                  NOP
+  3195  000865   0000(1)                  NOP
+  3196  000866                     SDAL
+  3197  000866   67D0(1)  		b0bclr SDA
+  3198  000867   0000(1)                  NOP
+  3199  000868   0000(1)                  NOP
+  3200  000869   0000(1)                  NOP
+  3201  00086A   0000(1)                  NOP
+  3202  00086B   0000(1)                  NOP
+  3203  00086C   0000(1)                  NOP
+  3204  00086D   0000(1)                  NOP
+  3205  00086E   0000(1)                  NOP
+  3206  00086F   0000(1)                  NOP
+  3207  000870   0000(1)                  NOP
+  3208  000871   0000(1)                  NOP
+  3209  000872   8873(2)  		jmp	$+1
+  3210  000873                     SCLH 
+  3211  000873   6EB8(1)  		b0bset	SCL_MODE
+  3212  000874   8875(2)  		jmp	$+1
+  3213  000875   6ED0(1)  		b0bset 	SCL
+  3214  000876   0000(1)                  NOP
+  3215  000877   0000(1)                  NOP
+  3216  000878   0000(1)                  NOP
+  3217  000879   0000(1)                  NOP
+  3218  00087A   0000(1)                  NOP
+  3219  00087B   0000(1)                  NOP
+  3220  00087C   0000(1)                  NOP
+  3221  00087D   0000(1)                  NOP
+  3222  00087E   0000(1)                  NOP	
+  3223  00087F   0000(1)                  NOP
+  3224  000880   0000(1)                  NOP
+  3225  000881                     SDAH
+  3226  000881   6FD0(1)  		b0bset SDA
+  3227  000882   0000(1)                  NOP
+  3228  000883   0000(1)                  NOP
+  3229  000884   0000(1)                  NOP
+  3230  000885   0000(1)                  NOP
+  3231  000886   0000(1)                  NOP
+  3232  000887   0000(1)                  NOP 
+  3233  000888   0000(1)                  NOP
+  3234  000889   0000(1)                  NOP
+  3235  00088A   0000(1)                  NOP
+  3236  00088B   0000(1)                  NOP
+  3237  00088C   0000(1)                  NOP
+  3238  00088D   888E(2)  		jmp	$+1
+  3239  00088E                     
+  3240  00088E   0E00(2)          RET
+  3241  00088F             ;*************************************************************************************
+  3242  00088F             ;*************************************************************************************
+  3243  00088F             I2C_ACK:             ;发送ACK ，即SDA产生一个零
+  3244  00088F                     SCLL
+  3245  00088F   6EB8(1)  		b0bset	SCL_MODE
+  3246  000890   8891(2)  		jmp	$+1
+  3247  000891   66D0(1)  		b0bclr 	SCL
+  3248  000892   0000(1)                  NOP
+  3249  000893   0000(1)                  NOP
+  3250  000894   0000(1)                  NOP
+  3251  000895   0000(1)                  NOP
+  3252  000896   0000(1)                  NOP
+  3253  000897   0000(1)                  NOP
+  3254  000898   0000(1)                  NOP
+  3255  000899   0000(1)                  NOP
+  3256  00089A   0000(1)                  NOP
+  3257  00089B   0000(1)                  NOP
+  3258  00089C   0000(1)                  NOP
+  3259  00089D                     WRITEMODE
+  3260  00089D   6FB8(1)                B0bset  sda_mode
+  3261  00089E   0000(1)                  NOP
+  3262  00089F   0000(1)                  NOP
+  3263  0008A0   0000(1)                  NOP
+  3264  0008A1   0000(1)                  NOP
+  3265  0008A2   0000(1)                  NOP
+  3266  0008A3   88A4(2)                jmp    $+1
+  3267  0008A4                     SDAL
+  3268  0008A4   67D0(1)  		b0bclr SDA
+  3269  0008A5   0000(1)                  NOP
+  3270  0008A6   0000(1)                  NOP
+  3271  0008A7   0000(1)                  NOP
+  3272  0008A8   0000(1)                  NOP
+  3273  0008A9   0000(1)                  NOP
+  3274  0008AA   0000(1)                  NOP
+  3275  0008AB   0000(1)                  NOP
+  3276  0008AC   0000(1)                  NOP
+  3277  0008AD   0000(1)                  NOP
+  3278  0008AE   0000(1)                  NOP
+  3279  0008AF   0000(1)                  NOP
+  3280  0008B0   88B1(2)  		jmp	$+1
+  3281  0008B1                     SCLH
+  3282  0008B1   6EB8(1)  		b0bset	SCL_MODE
+  3283  0008B2   88B3(2)  		jmp	$+1
+  3284  0008B3   6ED0(1)  		b0bset 	SCL
+  3285  0008B4   0000(1)                  NOP
+  3286  0008B5   0000(1)                  NOP
+  3287  0008B6   0000(1)                  NOP
+  3288  0008B7   0000(1)                  NOP
+  3289  0008B8   0000(1)                  NOP
+  3290  0008B9   0000(1)                  NOP
+  3291  0008BA   0000(1)                  NOP
+  3292  0008BB   0000(1)                  NOP
+  3293  0008BC   0000(1)                  NOP	
+  3294  0008BD   0000(1)                  NOP
+  3295  0008BE   0000(1)                  NOP
+  3296  0008BF                     SCLL
+  3297  0008BF   6EB8(1)  		b0bset	SCL_MODE
+  3298  0008C0   88C1(2)  		jmp	$+1
+  3299  0008C1   66D0(1)  		b0bclr 	SCL
+  3300  0008C2   0000(1)                  NOP
+  3301  0008C3   0000(1)                  NOP
+  3302  0008C4   0000(1)                  NOP
+  3303  0008C5   0000(1)                  NOP
+  3304  0008C6   0000(1)                  NOP
+  3305  0008C7   0000(1)                  NOP
+  3306  0008C8   0000(1)                  NOP
+  3307  0008C9   0000(1)                  NOP
+  3308  0008CA   0000(1)                  NOP
+  3309  0008CB   0000(1)                  NOP
+  3310  0008CC   0000(1)                  NOP
+  3311  0008CD                   ;  READMODE
+  3312  0008CD   0E00(2)          RET
+  3313  0008CE                    ;SDAL
+  3314  0008CE                    ;CALL DELAY5US
+  3315  0008CE                    ;SCLH
+  3316  0008CE                    ;CALL DELAY5US
+  3317  0008CE                    ;SCLL
+  3318  0008CE                    ;CALL DELAY5US
+  3319  0008CE                    ;RET
+  3320  0008CE             
+  3321  0008CE             I2C_NOACK:            ;发送NOACK，即SDA产生一个一
+  3322  0008CE                    SCLL
+  3323  0008CE   6EB8(1)  		b0bset	SCL_MODE
+  3324  0008CF   88D0(2)  		jmp	$+1
+  3325  0008D0   66D0(1)  		b0bclr 	SCL
+  3326  0008D1   0000(1)                  NOP
+  3327  0008D2   0000(1)                  NOP
+  3328  0008D3   0000(1)                  NOP
+  3329  0008D4   0000(1)                  NOP
+  3330  0008D5   0000(1)                  NOP
+  3331  0008D6   0000(1)                  NOP
+  3332  0008D7   0000(1)                  NOP
+  3333  0008D8   0000(1)                  NOP
+  3334  0008D9   0000(1)                  NOP
+  3335  0008DA   0000(1)                  NOP
+  3336  0008DB   0000(1)                  NOP
+  3337  0008DC                    WRITEMODE
+  3338  0008DC   6FB8(1)                B0bset  sda_mode
+  3339  0008DD   0000(1)                  NOP
+  3340  0008DE   0000(1)                  NOP
+  3341  0008DF   0000(1)                  NOP
+  3342  0008E0   0000(1)                  NOP
+  3343  0008E1   0000(1)                  NOP
+  3344  0008E2   88E3(2)                jmp    $+1
+  3345  0008E3                    SDAH
+  3346  0008E3   6FD0(1)  		b0bset SDA
+  3347  0008E4   0000(1)                  NOP
+  3348  0008E5   0000(1)                  NOP
+  3349  0008E6   0000(1)                  NOP
+  3350  0008E7   0000(1)                  NOP
+  3351  0008E8   0000(1)                  NOP
+  3352  0008E9   0000(1)                  NOP 
+  3353  0008EA   0000(1)                  NOP
+  3354  0008EB   0000(1)                  NOP
+  3355  0008EC   0000(1)                  NOP
+  3356  0008ED   0000(1)                  NOP
+  3357  0008EE   0000(1)                  NOP
+  3358  0008EF   88F0(2)  		jmp	$+1
+  3359  0008F0                    SCLH
+  3360  0008F0   6EB8(1)  		b0bset	SCL_MODE
+  3361  0008F1   88F2(2)  		jmp	$+1
+  3362  0008F2   6ED0(1)  		b0bset 	SCL
+  3363  0008F3   0000(1)                  NOP
+  3364  0008F4   0000(1)                  NOP
+  3365  0008F5   0000(1)                  NOP
+  3366  0008F6   0000(1)                  NOP
+  3367  0008F7   0000(1)                  NOP
+  3368  0008F8   0000(1)                  NOP
+  3369  0008F9   0000(1)                  NOP
+  3370  0008FA   0000(1)                  NOP
+  3371  0008FB   0000(1)                  NOP	
+  3372  0008FC   0000(1)                  NOP
+  3373  0008FD   0000(1)                  NOP
+  3374  0008FE                    SCLL
+  3375  0008FE   6EB8(1)  		b0bset	SCL_MODE
+  3376  0008FF   8900(2)  		jmp	$+1
+  3377  000900   66D0(1)  		b0bclr 	SCL
+  3378  000901   0000(1)                  NOP
+  3379  000902   0000(1)                  NOP
+  3380  000903   0000(1)                  NOP
+  3381  000904   0000(1)                  NOP
+  3382  000905   0000(1)                  NOP
+  3383  000906   0000(1)                  NOP
+  3384  000907   0000(1)                  NOP
+  3385  000908   0000(1)                  NOP
+  3386  000909   0000(1)                  NOP
+  3387  00090A   0000(1)                  NOP
+  3388  00090B   0000(1)                  NOP
+  3389  00090C   0E00(2)         RET
+  3390  00090D                    ;SDAH
+  3391  00090D                    ;CALL  DELAY5US
+  3392  00090D                    ;SCLH
+  3393  00090D                    ;CALL  DELAY5US
+  3394  00090D                    ;SCLL
+  3395  00090D                    ;CALL  DELAY5US
+  3396  00090D                    ;RET
+  3397  00090D             
+  3398  00090D             I2C_CHECKACK:          ;检查ACK
+  3399  00090D                    SDAH        ;拉高SDA与SCL释放总线
+  3400  00090D   6FD0(1)  		b0bset SDA
+  3401  00090E   0000(1)                  NOP
+  3402  00090F   0000(1)                  NOP
+  3403  000910   0000(1)                  NOP
+  3404  000911   0000(1)                  NOP
+  3405  000912   0000(1)                  NOP
+  3406  000913   0000(1)                  NOP 
+  3407  000914   0000(1)                  NOP
+  3408  000915   0000(1)                  NOP
+  3409  000916   0000(1)                  NOP
+  3410  000917   0000(1)                  NOP
+  3411  000918   0000(1)                  NOP
+  3412  000919   891A(2)  		jmp	$+1
+  3413  00091A                                    
+  3414  00091A                    READMODE  ;SDA在SCL为低的时候变化，谁先拉低，谁掌握SDA
+  3415  00091A   67B8(1)                B0bclr  sda_mode
+  3416  00091B   0000(1)                  NOP
+  3417  00091C   0000(1)                  NOP
+  3418  00091D   0000(1)                  NOP
+  3419  00091E   0000(1)                  NOP
+  3420  00091F   0000(1)                  NOP		
+  3421  000920   8921(2)                jmp    $+1
+  3422  000921                    SCLH      ;主机在SCL拉高的时候读取一次ACK
+  3423  000921   6EB8(1)  		b0bset	SCL_MODE
+  3424  000922   8923(2)  		jmp	$+1
+  3425  000923   6ED0(1)  		b0bset 	SCL
+  3426  000924   0000(1)                  NOP
+  3427  000925   0000(1)                  NOP
+  3428  000926   0000(1)                  NOP
+  3429  000927   0000(1)                  NOP
+  3430  000928   0000(1)                  NOP
+  3431  000929   0000(1)                  NOP
+  3432  00092A   0000(1)                  NOP
+  3433  00092B   0000(1)                  NOP
+  3434  00092C   0000(1)                  NOP	
+  3435  00092D   0000(1)                  NOP
+  3436  00092E   0000(1)                  NOP
+  3437  00092F                    ;CALL  DELAY10US
+  3438  00092F                    ;SCLH
+  3439  00092F                    ;B0BCLR  SDA_MODE
+  3440  00092F   32FF(1)         B0MOV  R,#0FFh
+  3441  000930             I2C_CHECKACK_cyc:
+  3442  000930                    DJNZ  R,I2C_CHECKACK_judge 
+  3443  000930   2682(1+S)  	decms	R
+  3444  000931   8934(2)  		jmp	I2C_CHECKACK_judge
+  3445  000932   6821(1)         B0BSET  ACKDATA           ;noack
+  3446  000933   8937(2)         JMP   I2C_CHECKACK_RET 
+  3447  000934             I2C_CHECKACK_judge:
+  3448  000934   77D0(1+S)          B0BTS0  SDA
+  3449  000935   8930(2)         JMP   I2C_CHECKACK_cyc
+  3450  000936   6021(1)         B0BCLR  ACKDATA           ;ack
+  3451  000937             I2C_CHECKACK_RET:
+  3452  000937                    SCLL
+  3453  000937   6EB8(1)  		b0bset	SCL_MODE
+  3454  000938   8939(2)  		jmp	$+1
+  3455  000939   66D0(1)  		b0bclr 	SCL
+  3456  00093A   0000(1)                  NOP
+  3457  00093B   0000(1)                  NOP
+  3458  00093C   0000(1)                  NOP
+  3459  00093D   0000(1)                  NOP
+  3460  00093E   0000(1)                  NOP
+  3461  00093F   0000(1)                  NOP
+  3462  000940   0000(1)                  NOP
+  3463  000941   0000(1)                  NOP
+  3464  000942   0000(1)                  NOP
+  3465  000943   0000(1)                  NOP
+  3466  000944   0000(1)                  NOP
+  3467  000945   0E00(2)         RET
+  3468  000946             ;*************************************************************************************
+  3469  000946             ;*************************************************************************************
+  3470  000946             SEND_I2C_ONEBYTE:        ;发送位于SENDBUF的一个字节,先发高位
+  3471  000946                     writemode
+  3472  000946   6FB8(1)                B0bset  sda_mode
+  3473  000947   0000(1)                  NOP
+  3474  000948   0000(1)                  NOP
+  3475  000949   0000(1)                  NOP
+  3476  00094A   0000(1)                  NOP
+  3477  00094B   0000(1)                  NOP
+  3478  00094C   894D(2)                jmp    $+1
+  3479  00094D   3208(1)          B0MOV  R,#08
+  3480  00094E                     SCLL             ;SDA改变之前先拉低SCL
+  3481  00094E   6EB8(1)  		b0bset	SCL_MODE
+  3482  00094F   8950(2)  		jmp	$+1
+  3483  000950   66D0(1)  		b0bclr 	SCL
+  3484  000951   0000(1)                  NOP
+  3485  000952   0000(1)                  NOP
+  3486  000953   0000(1)                  NOP
+  3487  000954   0000(1)                  NOP
+  3488  000955   0000(1)                  NOP
+  3489  000956   0000(1)                  NOP
+  3490  000957   0000(1)                  NOP
+  3491  000958   0000(1)                  NOP
+  3492  000959   0000(1)                  NOP
+  3493  00095A   0000(1)                  NOP
+  3494  00095B   0000(1)                  NOP
+  3495  00095C             SEND_I2C_ONEBYTE_START:;判断发1 or  0
+  3496  00095C   771F(1+S)          B0BTS0   SENDBIT
+  3497  00095D   898D(2)          JMP    SEND_I2C_ONEBYTE_1
+  3498  00095E   895F(2)          JMP    SEND_I2C_ONEBYTE_0
+  3499  00095F             SEND_I2C_ONEBYTE_0:; 发 0  
+  3500  00095F                     SDAL
+  3501  00095F   67D0(1)  		b0bclr SDA
+  3502  000960   0000(1)                  NOP
+  3503  000961   0000(1)                  NOP
+  3504  000962   0000(1)                  NOP
+  3505  000963   0000(1)                  NOP
+  3506  000964   0000(1)                  NOP
+  3507  000965   0000(1)                  NOP
+  3508  000966   0000(1)                  NOP
+  3509  000967   0000(1)                  NOP
+  3510  000968   0000(1)                  NOP
+  3511  000969   0000(1)                  NOP
+  3512  00096A   0000(1)                  NOP
+  3513  00096B   896C(2)  		jmp	$+1
+  3514  00096C                     SCLH       ;SCL上升沿提醒从机读取SDA
+  3515  00096C   6EB8(1)  		b0bset	SCL_MODE
+  3516  00096D   896E(2)  		jmp	$+1
+  3517  00096E   6ED0(1)  		b0bset 	SCL
+  3518  00096F   0000(1)                  NOP
+  3519  000970   0000(1)                  NOP
+  3520  000971   0000(1)                  NOP
+  3521  000972   0000(1)                  NOP
+  3522  000973   0000(1)                  NOP
+  3523  000974   0000(1)                  NOP
+  3524  000975   0000(1)                  NOP
+  3525  000976   0000(1)                  NOP
+  3526  000977   0000(1)                  NOP	
+  3527  000978   0000(1)                  NOP
+  3528  000979   0000(1)                  NOP
+  3529  00097A                     SCLL       ;SCL下降沿提醒主机准备下一个SDA
+  3530  00097A   6EB8(1)  		b0bset	SCL_MODE
+  3531  00097B   897C(2)  		jmp	$+1
+  3532  00097C   66D0(1)  		b0bclr 	SCL
+  3533  00097D   0000(1)                  NOP
+  3534  00097E   0000(1)                  NOP
+  3535  00097F   0000(1)                  NOP
+  3536  000980   0000(1)                  NOP
+  3537  000981   0000(1)                  NOP
+  3538  000982   0000(1)                  NOP
+  3539  000983   0000(1)                  NOP
+  3540  000984   0000(1)                  NOP
+  3541  000985   0000(1)                  NOP
+  3542  000986   0000(1)                  NOP
+  3543  000987   0000(1)                  NOP
+  3544  000988   6286(1)          B0BCLR   FC
+  3545  000989   0B1F(1)          RLCM   SENDBUF
+  3546  00098A   2682(1+S)          DECMS  R
+  3547  00098B   895C(2)          JMP    SEND_I2C_ONEBYTE_START
+  3548  00098C   89BB(2)          JMP    SEND_I2C_ONEBYTE_END     
+  3549  00098D             SEND_I2C_ONEBYTE_1:; 发 1
+  3550  00098D                     SDAH
+  3551  00098D   6FD0(1)  		b0bset SDA
+  3552  00098E   0000(1)                  NOP
+  3553  00098F   0000(1)                  NOP
+  3554  000990   0000(1)                  NOP
+  3555  000991   0000(1)                  NOP
+  3556  000992   0000(1)                  NOP
+  3557  000993   0000(1)                  NOP 
+  3558  000994   0000(1)                  NOP
+  3559  000995   0000(1)                  NOP
+  3560  000996   0000(1)                  NOP
+  3561  000997   0000(1)                  NOP
+  3562  000998   0000(1)                  NOP
+  3563  000999   899A(2)  		jmp	$+1
+  3564  00099A                     SCLH       ;SDA变化后，SCL拉高需保持一段时间，且时间不能太短，再拉低
+  3565  00099A   6EB8(1)  		b0bset	SCL_MODE
+  3566  00099B   899C(2)  		jmp	$+1
+  3567  00099C   6ED0(1)  		b0bset 	SCL
+  3568  00099D   0000(1)                  NOP
+  3569  00099E   0000(1)                  NOP
+  3570  00099F   0000(1)                  NOP
+  3571  0009A0   0000(1)                  NOP
+  3572  0009A1   0000(1)                  NOP
+  3573  0009A2   0000(1)                  NOP
+  3574  0009A3   0000(1)                  NOP
+  3575  0009A4   0000(1)                  NOP
+  3576  0009A5   0000(1)                  NOP	
+  3577  0009A6   0000(1)                  NOP
+  3578  0009A7   0000(1)                  NOP
+  3579  0009A8                     SCLL
+  3580  0009A8   6EB8(1)  		b0bset	SCL_MODE
+  3581  0009A9   89AA(2)  		jmp	$+1
+  3582  0009AA   66D0(1)  		b0bclr 	SCL
+  3583  0009AB   0000(1)                  NOP
+  3584  0009AC   0000(1)                  NOP
+  3585  0009AD   0000(1)                  NOP
+  3586  0009AE   0000(1)                  NOP
+  3587  0009AF   0000(1)                  NOP
+  3588  0009B0   0000(1)                  NOP
+  3589  0009B1   0000(1)                  NOP
+  3590  0009B2   0000(1)                  NOP
+  3591  0009B3   0000(1)                  NOP
+  3592  0009B4   0000(1)                  NOP
+  3593  0009B5   0000(1)                  NOP
+  3594  0009B6   6286(1)          B0BCLR   FC
+  3595  0009B7   0B1F(1)          RLCM   SENDBUF
+  3596  0009B8   2682(1+S)          DECMS  R
+  3597  0009B9   895C(2)          JMP    SEND_I2C_ONEBYTE_START
+  3598  0009BA   89BB(2)          JMP    SEND_I2C_ONEBYTE_END
+  3599  0009BB             SEND_I2C_ONEBYTE_END:  ;送完8bit,结束发送返回
+  3600  0009BB   0E00(2)          RET
+  3601  0009BC             ;*************************************************************************************
+  3602  0009BC             
+  3603  0009BC             ;*************************************************************************************     
+  3604  0009BC             I2C_WRITEBYTES:               ;WRITEDATA的数据写入从机特定地址位置
+  3605  0009BC   6921(1)           B0BSET    WRITE_OR_READ
+  3606  0009BD                      ;CALL   I2C_START
+  3607  0009BD             I2C_WRITEBYTES_SLAVER_ADR:    ;送从机地址
+  3608  0009BD   2DA0(1)           MOV    A,#I2C_CON_WRITE0
+  3609  0009BE   1F1F(1)           MOV    SENDBUF,A
+  3610  0009BF   C813(2)           CALL   I2C_START
+  3611  0009C0   C9E1(2)           CALL   I2C_WRITEBYTES_SEND   ;送一字节；加检测有无应答
+  3612  0009C1   7021(1+S)           B0BTS0   ACKDATA  ;0表示发送成功
+  3613  0009C2   89BD(2)           JMP    I2C_WRITEBYTES_SLAVER_ADR
+  3614  0009C3             ;I2C_WRITEBYTES_REG_ADR_M:    ;送从机寄存器地址
+  3615  0009C3              ;        MOV    A,WORD_ADR_M
+  3616  0009C3               ;       MOV    SENDBUF,A
+  3617  0009C3                ;      CALL    I2C_WRITEBYTES_SEND
+  3618  0009C3                 ;     B0BTS0   ACKDATA  ;0表示发送成功
+  3619  0009C3                  ;    JMP    I2C_WRITEBYTES_REG_ADR_M
+  3620  0009C3             I2C_WRITEBYTES_REG_ADR_L:
+  3621  0009C3   1E1E(1)           MOV    A,WORD_ADR_L
+  3622  0009C4   1F1F(1)           MOV    SENDBUF,A
+  3623  0009C5   C9E1(2)           CALL    I2C_WRITEBYTES_SEND
+  3624  0009C6   7021(1+S)           B0BTS0   ACKDATA  ;0表示发送成功
+  3625  0009C7   89C3(2)           JMP    I2C_WRITEBYTES_REG_ADR_L
+  3626  0009C8   7921(1+S)           B0BTS1   WRITE_OR_READ
+  3627  0009C9   0E00(2)           RET
+  3628  0009CA   89CB(2)           JMP    I2C_WRITEBYTES_DATA
+  3629  0009CB             I2C_WRITEBYTES_DATA:         ;送数据
+  3630  0009CB   3100(1)           B0MOV   H,#WRITEDATA$M
+  3631  0009CC   3022(1)           B0MOV   L,#WRITEDATA$L
+  3632  0009CD   2D00(1)           MOV   A,#00
+  3633  0009CE   1F43(1)           MOV     N01,A ;N01用来记录发送了多少字节
+  3634  0009CF             I2C_WRITEBYTES_DATA01:
+  3635  0009CF   2EE8(1)           B0MOV     A,@HL
+  3636  0009D0   2F1F(1)           B0MOV     SENDBUF,A
+  3637  0009D1   C9E1(2)           CALL    I2C_WRITEBYTES_SEND
+  3638  0009D2   7021(1+S)           B0BTS0   ACKDATA
+  3639  0009D3   89CF(2)           JMP    I2C_WRITEBYTES_DATA01
+  3640  0009D4   89D5(2)           JMP    I2C_WRITEBYTES_DATA02
+  3641  0009D5                      ;JMP    I2C_WRITEBYTES_DATA_NUM
+  3642  0009D5             I2C_WRITEBYTES_DATA02:
+  3643  0009D5   1643(1+S)           INCMS   N01
+  3644  0009D6   1E43(1)           MOV    A,N01
+  3645  0009D7   0610(1+S)           CMPRS  A,#10H         ;此处A的值决定发多少字节;此处A的值决定发多少字节;此处A的值决定发多少字节
+  3646  0009D8   89DA(2)           JMP    I2C_WRITEBYTES_DATA03
+  3647  0009D9   89E4(2)           JMP    I2C_WRITEBYTES_END 
+  3648  0009DA             I2C_WRITEBYTES_DATA03:
+  3649  0009DA   1680(1+S)           INCMS   L
+  3650  0009DB   2EE8(1)           B0MOV     A,@HL
+  3651  0009DC   2F1F(1)           B0MOV     SENDBUF,A
+  3652  0009DD   C9E1(2)           CALL    I2C_WRITEBYTES_SEND
+  3653  0009DE   7021(1+S)           B0BTS0   ACKDATA
+  3654  0009DF   89CF(2)           JMP    I2C_WRITEBYTES_DATA01
+  3655  0009E0                      ;JMP    I2C_WRITEBYTES_DATA_NUM
+  3656  0009E0   89D5(2)           JMP    I2C_WRITEBYTES_DATA02
+  3657  0009E1             
+  3658  0009E1             I2C_WRITEBYTES_SEND:
+  3659  0009E1   C946(2)           CALL   SEND_I2C_ONEBYTE
+  3660  0009E2   C90D(2)           CALL   I2C_CHECKACK
+  3661  0009E3   0E00(2)           RET
+  3662  0009E4             
+  3663  0009E4             I2C_WRITEBYTES_END:           ;结束写
+  3664  0009E4   C851(2)           CALL   I2C_STOP
+  3665  0009E5   C35E(2)           CALL   DELAY10MS
+  3666  0009E6   0E00(2)           RET
+  3667  0009E7             ;*************************************************************************************
+  3668  0009E7             ;*************************************************************************************
+  3669  0009E7             
+  3670  0009E7             I2C_READBYTES_RANDROM_READ:               ;特定地址读#VAL字节
+  3671  0009E7             
+  3672  0009E7                                                       ;假写,送从机写地址，与字地址
+  3673  0009E7   2DA0(1)           MOV    A,#I2C_CON_WRITE0
+  3674  0009E8   1F1F(1)           MOV    SENDBUF,A
+  3675  0009E9   C813(2)           CALL   I2C_START
+  3676  0009EA   C946(2)           CALL   SEND_I2C_ONEBYTE
+  3677  0009EB   C90D(2)           CALL   I2C_CHECKACK
+  3678  0009EC             
+  3679  0009EC             ;         MOV    A,WORD_ADR_M
+  3680  0009EC              ;        MOV    SENDBUF,A
+  3681  0009EC               ;       CALL   SEND_I2C_ONEBYTE
+  3682  0009EC                ;      CALL   I2C_CHECKACK
+  3683  0009EC             
+  3684  0009EC   1E1E(1)           MOV    A,WORD_ADR_L
+  3685  0009ED   1F1F(1)           MOV    SENDBUF,A
+  3686  0009EE   C946(2)           CALL   SEND_I2C_ONEBYTE
+  3687  0009EF   C90D(2)           CALL   I2C_CHECKACK
+  3688  0009F0             
+  3689  0009F0             I2C_READBYTES_DATA:
+  3690  0009F0   2DA1(1)           MOV    A,#I2C_CON_READ0     ;送从机读地址
+  3691  0009F1   1F1F(1)           MOV    SENDBUF,A
+  3692  0009F2   C813(2)           CALL   I2C_START     
+  3693  0009F3   C946(2)           CALL   SEND_I2C_ONEBYTE
+  3694  0009F4   C90D(2)           CALL   I2C_CHECKACK
+  3695  0009F5   7021(1+S)           B0BTS0   ACKDATA
+  3696  0009F6   89F0(2)           JMP    I2C_READBYTES_DATA
+  3697  0009F7   2D00(1)           MOV    A,#00
+  3698  0009F8   2F44(1)           B0MOV  N03,A
+  3699  0009F9   3100(1)           B0MOV   H,#RECEIVEDATA$M
+  3700  0009FA   3032(1)           B0MOV   L,#RECEIVEDATA$L  
+  3701  0009FB             I2C_READBYTES_DATA_01:   ;开始按字节读数据
+  3702  0009FB             
+  3703  0009FB   CA06(2)           CALL   RECEIVE_I2C_ONEBYTE
+  3704  0009FC   1680(1+S)           INCMS  L
+  3705  0009FD   C88F(2)           CALL   I2C_ACK
+  3706  0009FE                      CJNE_  N03,#10H,I2C_READBYTES_DATA_01;控制#val的值来控制读 多少字节
+  3707  0009FE   1E44(1)  	mov	a, N03
+  3708  0009FF   0610(1+S)  	cmprs	a, #10H
+  3709  000A00   89FB(2)  		jmp	I2C_READBYTES_DATA_01
+  3710  000A01   8A02(2)           JMP    I2C_READBYTES_END
+  3711  000A02                      
+  3712  000A02             I2C_READBYTES_END:
+  3713  000A02   C8CE(2)           CALL   I2C_NOACK
+  3714  000A03   C851(2)           CALL   I2C_STOP 
+  3715  000A04   C35E(2)           CALL   DELAY10MS
+  3716  000A05   0E00(2)           RET 
+  3717  000A06                   
+  3718  000A06             ;*************************************************************************************
+  3719  000A06             RECEIVE_I2C_ONEBYTE:      ;接收一个字节,数据放在RECEIVEBUF ,先收的为高位，
+  3720  000A06   3208(1)          B0MOV  R,#08
+  3721  000A07   1644(1+S)          INCMS  N03  ;N03记录读了多少字节
+  3722  000A08             RECEIVE_I2C_ONEBYTE_START:;判断接收的是1  or  0
+  3723  000A08                     SCLL
+  3724  000A08   6EB8(1)  		b0bset	SCL_MODE
+  3725  000A09   8A0A(2)  		jmp	$+1
+  3726  000A0A   66D0(1)  		b0bclr 	SCL
+  3727  000A0B   0000(1)                  NOP
+  3728  000A0C   0000(1)                  NOP
+  3729  000A0D   0000(1)                  NOP
+  3730  000A0E   0000(1)                  NOP
+  3731  000A0F   0000(1)                  NOP
+  3732  000A10   0000(1)                  NOP
+  3733  000A11   0000(1)                  NOP
+  3734  000A12   0000(1)                  NOP
+  3735  000A13   0000(1)                  NOP
+  3736  000A14   0000(1)                  NOP
+  3737  000A15   0000(1)                  NOP
+  3738  000A16                     READMODE     ;先拉低SCL允许SDA改变，再设置读模式，读SDA
+  3739  000A16   67B8(1)                B0bclr  sda_mode
+  3740  000A17   0000(1)                  NOP
+  3741  000A18   0000(1)                  NOP
+  3742  000A19   0000(1)                  NOP
+  3743  000A1A   0000(1)                  NOP
+  3744  000A1B   0000(1)                  NOP		
+  3745  000A1C   8A1D(2)                jmp    $+1
+  3746  000A1D                     SCLH
+  3747  000A1D   6EB8(1)  		b0bset	SCL_MODE
+  3748  000A1E   8A1F(2)  		jmp	$+1
+  3749  000A1F   6ED0(1)  		b0bset 	SCL
+  3750  000A20   0000(1)                  NOP
+  3751  000A21   0000(1)                  NOP
+  3752  000A22   0000(1)                  NOP
+  3753  000A23   0000(1)                  NOP
+  3754  000A24   0000(1)                  NOP
+  3755  000A25   0000(1)                  NOP
+  3756  000A26   0000(1)                  NOP
+  3757  000A27   0000(1)                  NOP
+  3758  000A28   0000(1)                  NOP	
+  3759  000A29   0000(1)                  NOP
+  3760  000A2A   0000(1)                  NOP
+  3761  000A2B   77D0(1+S)          B0BTS0   SDA
+  3762  000A2C   8A35(2)          JMP    RECEIVE_I2C_ONEBYTE_1
+  3763  000A2D   8A2E(2)          JMP    RECEIVE_I2C_ONEBYTE_0 
+  3764  000A2E             RECEIVE_I2C_ONEBYTE_0:; 收 0
+  3765  000A2E   0000(1)          NOP
+  3766  000A2F   0000(1)          NOP
+  3767  000A30   0B20(1)          RLCM   RECEIVEBUF     ;先收的为高位，所以先左移再，给最后一位置1或置0
+  3768  000A31   6020(1)          B0BCLR   RECEIVEBIT   ;RECEIVEBIT EQU RECEIVEBUF.0
+  3769  000A32   2682(1+S)          DECMS  R
+  3770  000A33   8A08(2)          JMP    RECEIVE_I2C_ONEBYTE_START
+  3771  000A34   8A3C(2)          JMP    RECEIVE_I2C_ONEBYTE_END
+  3772  000A35             RECEIVE_I2C_ONEBYTE_1: ; 收 1
+  3773  000A35   0000(1)          NOP
+  3774  000A36   0000(1)          NOP
+  3775  000A37   0B20(1)          RLCM   RECEIVEBUF
+  3776  000A38   6820(1)          B0BSET   RECEIVEBIT
+  3777  000A39   2682(1+S)          DECMS  R
+  3778  000A3A   8A08(2)          JMP    RECEIVE_I2C_ONEBYTE_START
+  3779  000A3B   8A3C(2)          JMP    RECEIVE_I2C_ONEBYTE_END
+  3780  000A3C             RECEIVE_I2C_ONEBYTE_END: ; 收满8bit退出接收
+  3781  000A3C              
+  3782  000A3C   1E20(1)          MOV     A,RECEIVEBUF
+  3783  000A3D   2FE8(1)          B0MOV     @HL,A
+  3784  000A3E   0E00(2)          RET 
+  3785  000A3F             ;*************************************************************************************
+  3786  000A3F             
+  3787  000A3F             
+  3788  000A3F                                    
+  3789  000A3F             ;*************************************************************************************
+  3790  000A3F             ;NAME:			write_eeprom_delay
+  3791  000A3F             ;INPUT:			NONE
+  3792  000A3F             ;FUNCTION:		
+  3793  000A3F             ;DESCRIBE:		NONE
+  3794  000A3F             ;CALL SUBPROGRAM:	NONE
+  3795  000A3F             ;USING RESOURCE:	A,wk00,r
+  3796  000A3F             ;STACK NEED:		0
+  3797  000A3F             ;OUTPUT:		wk00
+  3798  000A3F             ;*************************************************************************************
+  3799  000A3F             delay10us:				;10k
+  3800  000A3F   3701(1)  	b0mov	rbank,#01
+  3801  000A40   2D0A(1)  	mov	a,#10
+  3802  000A41   1F16(1)  	mov	i2c_delay,a
+  3803  000A42             delay10u0s10:
+  3804  000A42   2616(1+S)  	decms	i2c_delay
+  3805  000A43   8A42(2)  	jmp	delay10u0s10
+  3806  000A44   3700(1)  	b0mov	rbank,#00
+  3807  000A45   0E00(2)  	ret 
+  3808  000A46             delay5us:				;10k
+  3809  000A46   3701(1)  	b0mov	rbank,#01
+  3810  000A47   2D05(1)  	mov	a,#5
+  3811  000A48   1F16(1)  	mov	i2c_delay,a
+  3812  000A49             delay10u0s20:
+  3813  000A49   2616(1+S)  	decms	i2c_delay
+  3814  000A4A   8A49(2)  	jmp	delay10u0s20
+  3815  000A4B   3700(1)  	b0mov	rbank,#00
+  3816  000A4C   0E00(2)  	ret 
+  3817  000A4D             ;*************************************************************************************
+  3818  000A4D             WRITE_00:
+  3819  000A4D   3400(1)          B0MOV   Y,#WRITE_TABLE$M
+  3820  000A4E   339D(1)          B0MOV   Z,#WRITE_TABLE$L
+  3821  000A4F   3100(1)          B0MOV   H,#WRITEDATA$M
+  3822  000A50   3022(1)          B0MOV   L,#WRITEDATA$L
+  3823  000A51   2D00(1)          MOV     A,#00
+  3824  000A52   1F42(1)          MOV     N00,A
+  3825  000A53             WRITE_01:
+  3826  000A53   0D00(2)          MOVC
+  3827  000A54   2FE8(1)          B0MOV     @HL,A ;查表从WRITEDATA[0]开始赋值
+  3828  000A55   1680(1+S)          INCMS   L
+  3829  000A56   1683(1+S)          INCMS   Z
+  3830  000A57   2D01(1)          MOV     A,#01
+  3831  000A58   1342(1)          ADD     N00,A
+  3832  000A59                     CJNE_    N00,#10H,WRITE_01;;#VAL控制WRITEDATA[val]的数个数
+  3833  000A59   1E42(1)  	mov	a, N00
+  3834  000A5A   0610(1+S)  	cmprs	a, #10H
+  3835  000A5B   8A53(2)  		jmp	WRITE_01
+  3836  000A5C   0E00(2)          RET
+  3837  000A5D             
+  3838  000A5D             
+  3839  000A5D             ;;----------------------------------		
+  3840  000A5D             ENDP

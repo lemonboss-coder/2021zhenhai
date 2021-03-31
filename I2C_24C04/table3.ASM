@@ -1,0 +1,41 @@
+WRITE_TABLE:
+        DW    1H
+        DW    2H
+        DW    3H
+        DW    4H
+        DW    5H
+        DW    6H
+        DW    7H
+        DW    8H
+        DW    9H
+        DW    00H
+        DW    11H
+        DW    22H
+        DW    33H
+        DW    44H
+        DW    55H
+        DW    66H
+        DW    77H
+        DW    88H
+        DW    99H
+        DW    00H
+        DW    1H
+        DW    2H
+        DW    3H
+        DW    4H
+        DW    5H
+        DW    6H
+        DW    7H
+        DW    8H
+        DW    9H
+        DW    0AH
+        DW    0BH
+        DW    0CH
+        DW    0DH
+        DW    0EH
+        DW    0FH
+        DW    7AH
+        DW    7AH
+        DW    7AH
+;*********************************************************************************
+

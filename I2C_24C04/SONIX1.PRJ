@@ -1,0 +1,37 @@
+[ORDER]
+IncludeSortName=TRUE
+LibrarySortName=TRUE
+[REGISTER_0]
+A,b PCL PCH PFLAG,b H
+L Y Z STKP R
+@YZ RECEIVEBUF SENDBUF WORD_ADR_M WORD_ADR_L
+ACKDATA,b 
+[BREAKFILE]
+ITEM_1=I2C.ASM
+[BREAKPOINT]
+ITEM_0=0_162_-1_-1_2_0
+ITEM_1=0_231_-1_-1_2_0
+ITEM_2=0_204_0_-1_2_0
+ITEM_3=0_70_-1_-1_2_0
+ITEM_4=0_168_-1_-1_2_0
+ITEM_5=0_138_-1_-1_2_0
+ITEM_6=0_153_-1_-1_2_0
+ITEM_7=0_142_-1_-1_2_0
+[LINK]
+ITEM_1=SONIX1.ASM
+[DEPEND]
+ITEM_1=my.h
+ITEM_2=equ.asm
+ITEM_3=ram.asm
+ITEM_4=interrupt.asm
+ITEM_5=table.asm
+ITEM_6=table2.asm
+ITEM_7=table3.asm
+ITEM_8=math.asm
+ITEM_9=main.asm
+ITEM_10=init.asm
+ITEM_11=read_key.asm
+ITEM_12=display.asm
+ITEM_13=key_app.asm
+ITEM_14=lcd.asm
+ITEM_15=I2C.ASM
